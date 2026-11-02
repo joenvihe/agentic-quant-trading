@@ -96,6 +96,17 @@ aproximación `SMA20 * (1 + retorno 1M)` contra SMA50. Esta última es solo un p
 construido a partir de features, no un precio de cierre. El resultado es una
 clasificación descriptiva, no una recomendación de mercado.
 
+## Generar informe de investigación
+
+```powershell
+python -m scripts.research_asset SPY
+```
+
+Este comando orquesta Market Data Engine, Quant Feature Engine, Momentum Engine
+y Market Regime Engine. Resume datos y features disponibles; muestra `N/A`
+cuando falta historial o una comparación de universo. El score y percentil de
+momentum relativo aparecen como `N/A` para un único activo.
+
 ## Configuración
 
 La configuración está centralizada en `config/settings.py` y puede ajustarse

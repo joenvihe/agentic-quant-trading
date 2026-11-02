@@ -16,7 +16,9 @@
   proveedores externos. El proveedor implementa `MarketDataProvider`; el
   motor no depende de Yahoo Finance directamente.
 - `scripts/`: comandos de usuario. `python -m scripts.download_market_data
-  TICKER` orquesta el proveedor, la validación y la persistencia.
+  TICKER` y `python -m scripts.research_asset TICKER` son entry points CLI.
+- `application/services/`: orquesta el flujo de investigación y arma el
+  reporte, sin implementar cálculos cuantitativos.
 - `features/`: Quant Feature Engine calcula indicadores exclusivamente sobre
   el contrato OHLCV normalizado de `data/`.
 - `factors/`: Momentum Engine rankea activos usando retornos y percentiles;
@@ -80,3 +82,12 @@ BULL_VOLATILE, BULL_STRONG, RANGE y, para el resto o historial insuficiente,
 TRANSITION. Thresholds, valores iniciales, criterios y variables de entorno
 están documentados en el README y en `config/regime.py`. Es una clasificación
 descriptiva y no una recomendación de mercado.
+
+## Quant Research vertical slice
+
+`python -m scripts.research_asset TICKER` orquesta los módulos existentes en
+orden: Market Data y validación, features, factor de momentum, régimen y
+reporte. Los indicadores y clasificaciones se reutilizan; el CLI solo presenta
+el resultado. Los campos sin datos suficientes se reportan como `N/A`, con
+advertencias de historial insuficiente. Score y percentil relativos aparecen
+como `N/A` para un solo ticker porque no existe universo comparativo.
