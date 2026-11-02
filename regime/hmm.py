@@ -114,7 +114,8 @@ class GaussianHMMRegime:
             random_state=self.random_state,
         )
         try:
-            predicted_states = model.fit_predict(observations)
+            model.fit(observations)
+            predicted_states = model.predict(observations)
         except (ValueError, ArithmeticError, LinAlgError) as exc:
             raise HMMRegimeError(f"Gaussian HMM fitting failed: {exc}") from exc
 

@@ -199,7 +199,7 @@ def run_strategy_research(
             TargetPosition(
                 symbol=position.symbol,
                 timestamp=position.timestamp,
-                weight=position.weight * len(selected_symbols),
+                weight=position.weight,
                 reason=position.reason,
             )
             for position in target_positions[symbol]

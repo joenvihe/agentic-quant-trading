@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -97,8 +98,17 @@ def test_registry_rejects_unknown_strategy_names() -> None:
 
 
 def test_registry_rejects_objects_without_strategy_contract() -> None:
+    invalid = SimpleNamespace(name="valid_name")
+
     with pytest.raises(StrategyRegistryError, match="evaluate method"):
-        StrategyRegistry().register(object())  # type: ignore[arg-type]
+        StrategyRegistry().register(invalid)  # type: ignore[arg-type]
+
+
+def test_registry_rejects_empty_strategy_name() -> None:
+    invalid = SimpleNamespace(name=" ", evaluate=lambda value: value)
+
+    with pytest.raises(StrategyRegistryError, match="name cannot be empty"):
+        StrategyRegistry().register(invalid)  # type: ignore[arg-type]
 
 
 def test_momentum_regime_strategy_allows_positive_momentum_in_configured_regime() -> None:

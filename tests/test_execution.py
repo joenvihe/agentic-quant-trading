@@ -57,17 +57,32 @@ def test_insufficient_funds_and_overselling_are_rejected_without_state_change() 
     broker = PaperBroker(initial_cash=500)
 
     unaffordable = broker.submit_order(order("buy-large", OrderSide.BUY, 6), 100)
-    broker.submit_order(order("buy-small", OrderSide.BUY, 2), 100)
+    affordable = broker.submit_order(order("buy-small", OrderSide.BUY, 2), 100)
     before_oversell = broker.account_state
     oversell = broker.submit_order(order("sell-too-many", OrderSide.SELL, 3), 100)
-    sell_empty = broker.submit_order(order("sell-empty", OrderSide.SELL, 1), 100)
+    after_oversell = broker.account_state
+    sell_empty = broker.submit_order(
+        order("sell-empty", OrderSide.SELL, 1, "QQQ"), 100
+    )
+    after_empty_sale = broker.account_state
+    sell_available = broker.submit_order(
+        order("sell-available", OrderSide.SELL, 1), 100
+    )
 
     assert unaffordable.status is OrderStatus.REJECTED
     assert "Insufficient funds" in (unaffordable.rejection_reason or "")
+    assert affordable.status is OrderStatus.FILLED
+    assert before_oversell.cash == 300
+    assert before_oversell.positions["SPY"].quantity == 2
     assert oversell.status is OrderStatus.REJECTED
     assert "exceeds" in (oversell.rejection_reason or "")
+    assert after_oversell == before_oversell
     assert sell_empty.status is OrderStatus.REJECTED
-    assert broker.account_state == before_oversell
+    assert after_empty_sale == before_oversell
+    assert sell_available.status is OrderStatus.FILLED
+    assert broker.account_state.cash == 400
+    assert broker.account_state.positions["SPY"].quantity == 1
+    assert "QQQ" not in broker.account_state.positions
 
 
 def test_commission_and_adverse_slippage_are_applied() -> None:

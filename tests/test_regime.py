@@ -88,7 +88,7 @@ def test_values_just_below_volatility_threshold_do_not_cross_it() -> None:
 
 
 def test_confirmation_threshold_requires_two_of_three_criteria() -> None:
-    exactly_one = detect_regime(
+    bearish_confirmed = detect_regime(
         make_features(sma_20=100, sma_50=110, return_1m=0.02),
         RegimeThresholds(),
     )
@@ -97,10 +97,35 @@ def test_confirmation_threshold_requires_two_of_three_criteria() -> None:
         RegimeThresholds(),
     )
 
-    assert exactly_one.evidence["confirmation"]["bullish_agreements"] == 1
-    assert exactly_one.evidence["confirmation"]["state"] == "MIXED_OR_INSUFFICIENT"
+    assert bearish_confirmed.evidence["confirmation"]["bullish_agreements"] == 1
+    assert bearish_confirmed.evidence["confirmation"]["bearish_agreements"] == 2
+    assert bearish_confirmed.evidence["confirmation"]["bearish_criteria"] == {
+        "return_1m_and_3m_negative": False,
+        "sma_20_below_sma_50": True,
+        "inferred_price_below_sma_50": True,
+    }
+    assert bearish_confirmed.evidence["confirmation"]["bullish_criteria"] == {
+        "return_1m_and_3m_positive": True,
+        "sma_20_above_sma_50": False,
+        "inferred_price_above_sma_50": False,
+    }
+    assert bearish_confirmed.evidence["confirmation"]["state"] == "CONFIRMED_BEARISH"
     assert exactly_two.evidence["confirmation"]["bullish_agreements"] == 2
+    assert exactly_two.evidence["confirmation"]["bearish_agreements"] == 1
+    assert exactly_two.evidence["confirmation"]["bullish_criteria"] == {
+        "return_1m_and_3m_positive": True,
+        "sma_20_above_sma_50": False,
+        "inferred_price_above_sma_50": True,
+    }
     assert exactly_two.evidence["confirmation"]["state"] == "CONFIRMED_BULLISH"
+
+    mixed = detect_regime(
+        make_features(sma_20=100, sma_50=110, return_1m=0.10),
+        RegimeThresholds(),
+    )
+    assert mixed.evidence["confirmation"]["bullish_agreements"] == 1
+    assert mixed.evidence["confirmation"]["bearish_agreements"] == 1
+    assert mixed.evidence["confirmation"]["state"] == "MIXED_OR_INSUFFICIENT"
 
 
 def test_equal_direction_averages_are_neutral() -> None:

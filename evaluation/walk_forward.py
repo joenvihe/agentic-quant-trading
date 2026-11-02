@@ -3,6 +3,7 @@
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, fields
 import math
+from numbers import Real
 from typing import Any
 
 from backtest.types import BacktestResult
@@ -82,7 +83,7 @@ def run_walk_forward(
                 train_result, periods_per_year, risk_free_rate
             )
             metric_value = getattr(metrics, metric_name)
-            if metric_value is not None and math.isfinite(metric_value):
+            if _is_finite_metric(metric_value):
                 evaluated.append((parameters, metrics))
 
         if not evaluated:
@@ -96,7 +97,8 @@ def run_walk_forward(
                     in_sample_metrics=None,
                     out_of_sample_metrics=None,
                     warnings=(
-                        f"No candidate produced a finite {metric_name} metric.",
+                        f"In-sample {metric_name} is undefined; "
+                        "no parameters were selected.",
                     ),
                 )
             )
@@ -111,7 +113,9 @@ def run_walk_forward(
         out_of_sample_metrics = calculate_metrics(
             test_result, periods_per_year, risk_free_rate
         )
-        if getattr(out_of_sample_metrics, metric_name) is None:
+        if not _is_finite_metric(
+            getattr(out_of_sample_metrics, metric_name)
+        ):
             warnings.append(
                 f"Out-of-sample {metric_name} is undefined for this window."
             )
@@ -128,3 +132,11 @@ def run_walk_forward(
             )
         )
     return tuple(results)
+
+
+def _is_finite_metric(value: object) -> bool:
+    return (
+        isinstance(value, Real)
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+    )

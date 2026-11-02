@@ -1,7 +1,10 @@
+import builtins
 import json
 import math
 
+import application.services.strategy_research as strategy_research_module
 from data.synthetic import SyntheticMarketDataProvider
+from risk.engine import evaluate_risk
 from scripts.run_strategy_research import main
 
 
@@ -16,6 +19,51 @@ def test_offline_demo_runs_full_pipeline_and_publishes_all_outputs(
 ) -> None:
     workspace = tmp_path / "research_workspace"
     monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(workspace))
+    risk_inputs: list[tuple[float, float]] = []
+    backtest_targets: list[float] = []
+    original_evaluate_risk = evaluate_risk
+    original_run_backtest = strategy_research_module.run_backtest
+
+    def checked_evaluate_risk(
+        requested_weight: float,
+        current_exposure: float,
+        limits,
+        **kwargs,
+    ):
+        for value in (requested_weight, current_exposure):
+            assert isinstance(value, (int, float)) and not isinstance(value, bool)
+            assert math.isfinite(value)
+            assert 0 <= value <= 1
+        risk_inputs.append((requested_weight, current_exposure))
+        decision = original_evaluate_risk(
+            requested_weight, current_exposure, limits, **kwargs
+        )
+        assert math.isfinite(decision.approved_weight)
+        assert 0 <= decision.approved_weight <= 1
+        return decision
+
+    def checked_run_backtest(market_data, target_positions, strategy_name, config):
+        if strategy_name == "moving_average":
+            for position in target_positions:
+                assert isinstance(position.weight, (int, float))
+                assert not isinstance(position.weight, bool)
+                assert math.isfinite(position.weight)
+                assert 0 <= position.weight <= 1
+                backtest_targets.append(position.weight)
+        return original_run_backtest(
+            market_data, target_positions, strategy_name, config
+        )
+
+    monkeypatch.setattr(strategy_research_module, "evaluate_risk", checked_evaluate_risk)
+    monkeypatch.setattr(strategy_research_module, "run_backtest", checked_run_backtest)
+    original_import = builtins.__import__
+
+    def reject_yahoo_import(name, *args, **kwargs):
+        if name == "data.providers.yahoo_finance" or name == "yfinance":
+            raise AssertionError("Offline demo must not import Yahoo Finance.")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", reject_yahoo_import)
 
     exit_code = main(
         [
@@ -34,6 +82,9 @@ def test_offline_demo_runs_full_pipeline_and_publishes_all_outputs(
 
     assert exit_code == 0
     assert "DEMO / SYNTHETIC DATA" in capsys.readouterr().out
+    assert risk_inputs
+    assert backtest_targets
+    assert any(weight > 0 for weight in backtest_targets)
     reports = tuple((workspace / "reports").glob("moving_average-*.json"))
     csv_reports = tuple((workspace / "reports").glob("moving_average-*.csv"))
     html_reports = tuple((workspace / "reports").glob("moving_average-*.html"))

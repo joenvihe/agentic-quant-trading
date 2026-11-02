@@ -64,10 +64,13 @@ def test_ranks_all_momentum_horizons_and_calculates_absolute_momentum() -> None:
     assert ranking[0].momentum_12m == 0.16
     assert ranking[0].absolute_momentum
     assert not ranking[-1].absolute_momentum
-    assert ranking[0].composite_score == pytest.approx(100)
-    assert ranking[-1].composite_score == pytest.approx(0)
+    assert ranking[0].composite_score == pytest.approx(91.66666666666666)
+    assert ranking[-1].composite_score == pytest.approx(8.333333333333334)
     assert ranking[0].percentile_rank == 100
     assert ranking[-1].percentile_rank == 0
+    assert ranking[0].relative_momentum["1m"] == pytest.approx(200 / 3)
+    assert ranking[0].relative_momentum["3m"] == 100
+    assert ranking[0].relative_momentum["6m"] == 100
     assert ranking[0].relative_momentum["12m"] == 100
     assert {field.name for field in fields(ranking[0])} == {
         "rank",

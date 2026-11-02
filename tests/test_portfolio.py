@@ -134,7 +134,7 @@ def test_numerical_optimizer_failure_is_not_replaced_with_equal_weight(
 def test_optimizer_rejects_insufficient_and_invalid_return_series() -> None:
     optimizer = MaximumSharpeOptimizer()
 
-    with pytest.raises(ValueError, match="at least two"):
+    with pytest.raises(ValueError, match=r"(?i)at least two"):
         optimizer.optimize(("A",), {"A": (0.01,)})
     with pytest.raises(ValueError, match="finite"):
         optimizer.optimize(("A",), {"A": (0.01, math.nan)})
