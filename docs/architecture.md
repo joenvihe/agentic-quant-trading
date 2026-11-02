@@ -90,10 +90,11 @@ dependencias fluyen hacia componentes de dominio más pequeños, evitando ciclos
 ## Market Data Engine v0.1
 
 El vertical slice actual descarga barras diarias OHLCV de Yahoo Finance,
-normaliza los timestamps a UTC, valida orden, duplicados, valores ausentes,
-precios y coherencia OHLC, persiste en `data/market_data/<TICKER>.csv`, vuelve
-a validar al leer y presenta un resumen. `AQT_DATA_DIR` cambia el directorio
-raíz de persistencia.
+normaliza los timestamps a UTC, valida que las barras ya estén en orden
+cronológico (rechaza entradas desordenadas; no las ordena silenciosamente),
+además de duplicados, valores ausentes, precios y coherencia OHLC. Persiste en
+`data/market_data/<TICKER>.csv`, vuelve a validar al leer y presenta un
+resumen. `AQT_DATA_DIR` cambia el directorio raíz de persistencia.
 
 Yahoo Finance es una fuente de terceros sin garantía de disponibilidad; el
 comando no sustituye datos corregidos ni informa éxito si la descarga o
@@ -103,6 +104,11 @@ Estos motores no conectan brokers reales ni gestionan dinero real. `PaperBroker`
 es una simulación local en memoria que puede ejecutar órdenes paper únicamente
 con precios explícitos proporcionados por el caller. El agente de investigación
 es determinista y no utiliza LLM ni LangGraph.
+
+El pipeline multi-asset usa `EqualWeightAllocator`, aplica el Risk Engine por
+activo, ejecuta backtests single-asset en sleeves de capital iguales y agrega
+las curvas resultantes en timestamps comunes. No es todavía una cartera
+consolidada con cash compartido, rebalanceo ni drawdown global.
 
 ## Signals + Strategies — Fase 1
 
@@ -337,6 +343,17 @@ Cada ejecución registra un `trace_id`, llamadas, evidencia, warnings y errores;
 valida y muestra el plan sin invocar providers ni escribir archivos. No se usa
 LLM o LangGraph: el workflow es determinista y acotado, de modo que un framework
 de grafos no aporta capacidades necesarias. El agente no ejecuta código de
-requests, exige rutas configuradas absolutas sin traversal ni enlaces
-simbólicos, no modifica estrategias, no accede a credenciales, no conecta
-PaperBroker y no afirma rentabilidad futura.
+requests, no modifica estrategias, no accede a credenciales, no conecta
+PaperBroker y no afirma rentabilidad futura. Las rutas del request son
+relativas a la raíz configurada por `AQT_RESEARCH_WORKSPACE` (por defecto
+`research_workspace`); se rechazan rutas absolutas, traversal y escapes por
+symlink.
+
+## Contratos de ResearchReport
+
+Hay dos contratos con el mismo nombre que pertenecen a flujos distintos y no
+son intercambiables: `application.services.research.ResearchReport` representa
+el informe single-asset de investigación de mercado; `reporting.research_report.ResearchReport`
+es el modelo estructurado de reporting para resultados de backtest,
+comparación y artefactos del pipeline. Se conservan ambos nombres por
+compatibilidad.

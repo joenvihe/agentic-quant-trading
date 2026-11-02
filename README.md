@@ -1,7 +1,8 @@
 # Agentic Quant Trading
 
 Proyecto educativo para construir progresivamente un sistema de investigación
-de swing trading basado en Python, herramientas cuantitativas e IA agéntica.
+de swing trading basado en Python y herramientas cuantitativas, con
+orquestación determinista de investigación.
 
 ## Alcance actual: investigación cuantitativa y portfolio
 
@@ -31,7 +32,9 @@ de red y no se usan credenciales. Las órdenes se resuelven inmediatamente; la
 cancelación no aplica a este flujo síncrono.
 
 El backtest y PaperBroker son simulaciones locales de investigación. No
-gestionan dinero real ni se implementan agentes, LLMs o LangGraph.
+gestionan dinero real. Existe un ResearchAgent determinista, pero no usa LLM
+ni LangGraph, no ejecuta código arbitrario, no llama a PaperBroker y no ejecuta
+órdenes reales.
 
 Las capabilities existentes también se exponen como adapters tipados en
 [`application/tools/`](application/tools/) para research, backtest,
@@ -49,8 +52,11 @@ warnings, errores y un `trace_id`, y se puede convertir a un objeto JSON-safe
 con `state.to_dict()`.
 
 El modo `dry_run=True` valida y muestra el plan, pero no descarga datos ni
-escribe archivos. El agente no acepta prompts como instrucciones ejecutables,
-código, nombres de herramientas arbitrarias ni brokers; no usa LLM, LangGraph,
+escribe archivos. Las rutas del request son relativas a una raíz explícita
+configurable mediante `AQT_RESEARCH_WORKSPACE` (por defecto
+`research_workspace`); traversal, rutas absolutas y escapes por symlink se
+rechazan. El agente no acepta prompts como instrucciones ejecutables, código,
+nombres de herramientas arbitrarias ni brokers; no usa LLM, LangGraph,
 credenciales ni operaciones reales. Las conclusiones se limitan a métricas y
 salidas históricas observadas, e indican que no representan rentabilidad futura.
 La Fase 10 se mantiene parcial hasta que la suite completa pueda ejecutarse.
@@ -111,11 +117,13 @@ para argumentos inválidos.
 El provider de mercado de producción usa Yahoo Finance; las pruebas inyectan
 providers falsos y no acceden a Internet. Reportes y experimentos se escriben
 en el directorio indicado. Multi-activo reutiliza el backtest existente de un
-activo mediante sleeves de igual capital alineados a timestamps comunes; esto
-se indica en el reporte. El límite de drawdown se evalúa por activo usando la
-feature rolling 52W, no sobre una curva consolidada de cartera. Esta ruta es
-investigación: no importa `PaperBroker`, no crea órdenes, no usa LLM y no
-conecta brokers.
+activo mediante `EqualWeightAllocator`: aplica Risk Engine por activo, ejecuta
+backtests single-asset en sleeves de igual capital y agrega sus curvas en
+timestamps comunes. No constituye todavía una cartera consolidada con cash
+compartido, rebalanceo ni drawdown global. El límite de drawdown se evalúa por
+activo usando la feature rolling 52W, no sobre una curva consolidada de
+cartera. Esta ruta es investigación: no importa `PaperBroker`, no crea
+órdenes, no usa LLM y no conecta brokers.
 Los indicadores utilizan el historial anterior disponible para calentamiento,
 pero el backtest y sus reportes quedan limitados al intervalo solicitado.
 
@@ -222,6 +230,10 @@ Este comando orquesta Market Data Engine, Quant Feature Engine, Momentum Engine
 y Market Regime Engine. Resume datos y features disponibles; muestra `N/A`
 cuando falta historial o una comparación de universo. El score y percentil de
 momentum relativo aparecen como `N/A` para un único activo.
+Este flujo conserva el contrato
+`application.services.research.ResearchReport`; los reportes estructurados
+del pipeline multi-activo usan el contrato distinto
+`reporting.research_report.ResearchReport`.
 
 ## Signals y Strategies
 
@@ -358,6 +370,8 @@ La configuración está centralizada en `config/settings.py` y puede ajustarse
 mediante variables de entorno:
 
 - `AQT_DATA_DIR`: directorio de datos (por defecto, `data`)
+- `AQT_RESEARCH_WORKSPACE`: raíz del workspace del ResearchAgent (por defecto,
+  `research_workspace`)
 - `AQT_LOG_LEVEL`: nivel de logging (por defecto, `INFO`)
 
 Para configurar el logging de la aplicación, se puede llamar

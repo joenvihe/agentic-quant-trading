@@ -20,6 +20,25 @@ def save_experiment(
     record: ExperimentRecord,
     output_directory: str | Path,
 ) -> Path:
+    temporary_path, destination = _stage_experiment(record, output_directory)
+    try:
+        os.link(temporary_path, destination)
+    except FileExistsError as exc:
+        _remove_staged_file(temporary_path, exc)
+        raise ExperimentStorageError(
+            f"Experiment already exists: {record.experiment_id}"
+        ) from exc
+    except OSError as exc:
+        _remove_staged_file(temporary_path, exc)
+        raise ExperimentStorageError(f"Could not atomically save experiment: {exc}") from exc
+    temporary_path.unlink(missing_ok=True)
+    return destination
+
+
+def _stage_experiment(
+    record: ExperimentRecord,
+    output_directory: str | Path,
+) -> tuple[Path, Path]:
     directory = Path(output_directory)
     directory.mkdir(parents=True, exist_ok=True)
     destination = directory / f"{_validate_id(record.experiment_id)}.json"
@@ -47,17 +66,22 @@ def save_experiment(
             temporary.write(serialized)
             temporary.flush()
             os.fsync(temporary.fileno())
-        os.link(temporary_path, destination)
-    except FileExistsError as exc:
-        raise ExperimentStorageError(
-            f"Experiment already exists: {record.experiment_id}"
-        ) from exc
     except OSError as exc:
-        raise ExperimentStorageError(f"Could not atomically save experiment: {exc}") from exc
-    finally:
         if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
-    return destination
+            _remove_staged_file(temporary_path, exc)
+        raise ExperimentStorageError(
+            f"Could not stage experiment metadata: {exc}"
+        ) from exc
+    if temporary_path is None:
+        raise ExperimentStorageError("Could not stage experiment metadata.")
+    return temporary_path, destination
+
+
+def _remove_staged_file(path: Path, cause: OSError) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError as cleanup_error:
+        cause.add_note(f"Staged experiment cleanup failed: {cleanup_error}")
 
 
 def load_experiment(

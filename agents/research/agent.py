@@ -22,6 +22,7 @@ from application.services.strategy_research import (
 from application.tools.comparison import ComparisonRequest, compare_strategies
 from application.tools.reporting import ReportingRequest, generate_report
 from application.tools.types import resolve_trace_id, to_serializable
+from config.settings import Settings
 from data.market_data import MarketDataError, MarketDataProvider, normalize_ticker
 from evaluation.compare import PerformanceComparison
 from evaluation.types import PerformanceMetrics
@@ -77,8 +78,23 @@ class DeterministicResearchPlanner:
 
 
 class ResearchAgent:
-    def __init__(self, planner: ResearchPlanner | None = None) -> None:
+    def __init__(
+        self,
+        planner: ResearchPlanner | None = None,
+        *,
+        workspace_root: str | Path | None = None,
+    ) -> None:
         self._planner = planner or DeterministicResearchPlanner()
+        configured_root = (
+            Settings.from_env().research_workspace
+            if workspace_root is None
+            else workspace_root
+        )
+        if not isinstance(configured_root, (str, Path)) or not str(configured_root).strip():
+            raise ValueError("workspace_root must be an explicitly configured path.")
+        self._workspace_root = Path(configured_root).resolve()
+        if self._workspace_root == Path(self._workspace_root.anchor):
+            raise ValueError("workspace_root cannot be a filesystem root.")
 
     def run(
         self,
@@ -121,9 +137,15 @@ class ResearchAgent:
         if trace_error:
             return _fail(state, trace_error)
 
-        validation_error = _validate_request(request, provider)
+        validation_error = _validate_request(
+            request, provider, self._workspace_root
+        )
         if validation_error:
             return _fail(state, validation_error)
+        resolved_paths = _resolve_request_paths(
+            request, self._workspace_root
+        )
+        data_directory, output_directory = resolved_paths
 
         try:
             plan = authorize_plan(
@@ -167,8 +189,8 @@ class ResearchAgent:
                     result = run_strategy_research(
                         request.symbols,
                         provider,
-                        data_directory=request.data_directory,
-                        output_directory=request.output_directory,
+                        data_directory=data_directory,
+                        output_directory=output_directory,
                         strategy_name=strategy_name,
                         strategy_parameters=request.strategy_parameters.get(
                             strategy_name, {}
@@ -247,7 +269,7 @@ class ResearchAgent:
                         warnings=report_warnings,
                         trace_id=trace_id,
                     ),
-                    output_root=request.output_directory,
+                    output_root=output_directory,
                 )
                 state.tool_calls.append(
                     _tool_call_record(
@@ -295,13 +317,15 @@ def run_research_agent(
     provider: MarketDataProvider,
     *,
     planner: ResearchPlanner | None = None,
+    workspace_root: str | Path | None = None,
 ) -> ResearchAgentState:
-    return ResearchAgent(planner).run(request, provider)
+    return ResearchAgent(planner, workspace_root=workspace_root).run(request, provider)
 
 
 def _validate_request(
     request: ResearchAgentRequest,
     provider: MarketDataProvider,
+    workspace_root: Path,
 ) -> str | None:
     if not isinstance(request, ResearchAgentRequest):
         return "request must be a ResearchAgentRequest."
@@ -388,14 +412,17 @@ def _validate_request(
         ):
             return f"{name} must be an explicitly configured path."
         configured_path = Path(value)
-        if not configured_path.is_absolute() or ".." in configured_path.parts:
-            return f"{name} must be absolute and cannot contain parent traversal."
+        if (
+            configured_path.is_absolute()
+            or configured_path.drive
+            or configured_path.root
+            or ".." in configured_path.parts
+        ):
+            return f"{name} must be relative to workspace_root without parent traversal."
         try:
-            resolved_path = configured_path.resolve()
-            if resolved_path == Path(resolved_path.anchor):
-                return f"{name} cannot be a filesystem root."
-            if any(parent.is_symlink() for parent in (configured_path, *configured_path.parents)):
-                return f"{name} cannot traverse a symbolic link."
+            resolved_path = (workspace_root / configured_path).resolve()
+            if not resolved_path.is_relative_to(workspace_root):
+                return f"{name} escapes workspace_root after resolving symlinks."
         except OSError as exc:
             return f"{name} cannot be resolved safely: {exc}"
     if not _finite_real(request.initial_cash) or request.initial_cash <= 0:
@@ -412,6 +439,18 @@ def _validate_request(
     if not callable(getattr(provider, "fetch", None)):
         return "provider must implement fetch(ticker)."
     return None
+
+
+def _resolve_request_paths(
+    request: ResearchAgentRequest,
+    workspace_root: Path,
+) -> tuple[Path, Path]:
+    data_directory = (workspace_root / Path(request.data_directory)).resolve()
+    output_directory = (workspace_root / Path(request.output_directory)).resolve()
+    return (
+        data_directory,
+        output_directory,
+    )
 
 
 def _finite_real(value: object) -> bool:

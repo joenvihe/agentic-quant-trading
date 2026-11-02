@@ -12,7 +12,7 @@ from application.services.strategy_research import (
     StrategyResearchError,
     run_strategy_research,
 )
-from data.market_data import MarketDataProvider
+from data.market_data import MarketDataError, MarketDataProvider
 
 
 def _iso_date(value: str) -> date:
@@ -146,6 +146,7 @@ def main(
             slippage_bps=args.slippage_bps,
         )
     except (
+        MarketDataError,
         StrategyResearchError,
         OSError,
         ValueError,

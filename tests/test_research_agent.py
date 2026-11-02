@@ -3,6 +3,8 @@ from datetime import date, datetime, timedelta, timezone
 import json
 from pathlib import Path
 
+import pytest
+
 from agents.research.agent import (
     ResearchAgentRequest,
     run_research_agent,
@@ -53,8 +55,8 @@ def _request(tmp_path, *, strategies=("moving_average",), **kwargs):
     return ResearchAgentRequest(
         symbols=("SPY",),
         strategies=strategies,
-        data_directory=tmp_path / "data",
-        output_directory=tmp_path / "reports",
+        data_directory=Path("data"),
+        output_directory=Path("reports"),
         **options,
     )
 
@@ -63,7 +65,7 @@ def test_dry_run_selects_only_allowed_tools_and_does_not_fetch_data(tmp_path) ->
     provider = FakeMarketDataProvider()
     request = _request(tmp_path, dry_run=True)
 
-    state = run_research_agent(request, provider)
+    state = run_research_agent(request, provider, workspace_root=tmp_path)
     serialized = state.to_dict()
 
     assert state.success
@@ -86,6 +88,7 @@ def test_agent_executes_pipeline_compares_strategies_and_tracks_evidence(
     state = run_research_agent(
         _request(tmp_path, strategies=("moving_average", "momentum_regime")),
         provider,
+        workspace_root=tmp_path,
     )
 
     assert state.success
@@ -111,6 +114,7 @@ def test_missing_metric_evidence_is_reported_as_warning(tmp_path) -> None:
     state = run_research_agent(
         _request(tmp_path),
         FakeMarketDataProvider(),
+        workspace_root=tmp_path,
     )
 
     assert state.success
@@ -132,6 +136,7 @@ def test_unapproved_planner_tool_is_blocked_before_any_execution(tmp_path) -> No
         _request(tmp_path),
         provider,
         planner=planner,
+        workspace_root=tmp_path,
     )
 
     assert not state.success
@@ -153,6 +158,7 @@ def test_planner_cannot_change_strategy_or_workflow(tmp_path) -> None:
         _request(tmp_path),
         provider,
         planner=planner,
+        workspace_root=tmp_path,
     )
 
     assert not state.success
@@ -165,6 +171,7 @@ def test_trace_id_and_strategy_parameters_are_validated(tmp_path) -> None:
     unsafe_trace = run_research_agent(
         _request(tmp_path, trace_id="../outside"),
         provider,
+        workspace_root=tmp_path,
     )
     assert not unsafe_trace.success
     assert unsafe_trace.trace_id != "../outside"
@@ -176,26 +183,114 @@ def test_trace_id_and_strategy_parameters_are_validated(tmp_path) -> None:
             strategy_parameters={"moving_average": {"python": "arbitrary"}},
         ),
         provider,
+        workspace_root=tmp_path,
     )
     assert not unknown_parameter.success
     assert "Unknown moving_average parameter" in unknown_parameter.errors[0]
     assert provider.requested == []
 
 
-def test_untrusted_or_relative_output_paths_are_rejected(tmp_path) -> None:
+def test_absolute_paths_are_rejected(tmp_path) -> None:
     provider = FakeMarketDataProvider()
     request = _request(tmp_path)
-    relative_output = run_research_agent(
-        replace(request, output_directory=Path("reports")),
+    absolute_output = run_research_agent(
+        replace(request, output_directory=tmp_path / "reports"),
         provider,
+        workspace_root=tmp_path,
     )
-    assert not relative_output.success
-    assert "absolute" in relative_output.errors[0]
+    assert not absolute_output.success
+    assert "relative" in absolute_output.errors[0]
+    assert provider.requested == []
 
-    traversal_data = run_research_agent(
-        replace(request, data_directory=tmp_path / ".." / "outside"),
+
+@pytest.mark.parametrize(
+    "relative_path",
+    ("../outside", "nested/../outside"),
+)
+def test_parent_traversal_is_rejected(tmp_path, relative_path) -> None:
+    provider = FakeMarketDataProvider()
+    request = replace(_request(tmp_path), data_directory=Path(relative_path))
+    result = run_research_agent(
+        request,
         provider,
+        workspace_root=tmp_path,
     )
-    assert not traversal_data.success
-    assert "parent traversal" in traversal_data.errors[0]
+    assert not result.success
+    assert "parent traversal" in result.errors[0]
+    assert provider.requested == []
+
+
+def test_symlink_escape_is_rejected(tmp_path) -> None:
+    provider = FakeMarketDataProvider()
+    outside = tmp_path.parent / f"{tmp_path.name}-outside"
+    outside.mkdir()
+    link = tmp_path / "linked"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError) as exc:
+        outside.rmdir()
+        pytest.skip(f"Directory symlinks are unavailable: {exc}")
+
+    try:
+        result = run_research_agent(
+            replace(_request(tmp_path), output_directory=Path("linked/reports")),
+            provider,
+            workspace_root=tmp_path,
+        )
+    finally:
+        link.unlink()
+        outside.rmdir()
+    assert not result.success
+    assert "symlinks" in result.errors[0]
+    assert provider.requested == []
+
+
+def test_dry_run_is_deterministic_with_workspace_relative_paths(tmp_path) -> None:
+    provider = FakeMarketDataProvider()
+    request = _request(tmp_path, dry_run=True)
+    first = run_research_agent(request, provider, workspace_root=tmp_path)
+    second = run_research_agent(request, provider, workspace_root=tmp_path)
+
+    assert first.to_dict() == second.to_dict()
+    assert provider.requested == []
+    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "reports").exists()
+
+
+def test_relative_paths_resolve_inside_configured_workspace(tmp_path) -> None:
+    provider = FakeMarketDataProvider()
+    result = run_research_agent(
+        _request(tmp_path, dry_run=True),
+        provider,
+        workspace_root=tmp_path,
+    )
+    assert result.success
+    assert provider.requested == []
+
+
+def test_agent_uses_configured_workspace_environment_variable(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
+
+    result = run_research_agent(
+        _request(tmp_path, dry_run=True),
+        FakeMarketDataProvider(),
+    )
+
+    assert result.success
+    assert result.dry_run
+    assert not (tmp_path / "data").exists()
+    assert not (tmp_path / "reports").exists()
+
+
+def test_legacy_absolute_data_path_is_rejected(tmp_path) -> None:
+    provider = FakeMarketDataProvider()
+    result = run_research_agent(
+        replace(_request(tmp_path), data_directory=tmp_path / "data"),
+        provider,
+        workspace_root=tmp_path,
+    )
+    assert not result.success
+    assert "relative" in result.errors[0]
     assert provider.requested == []

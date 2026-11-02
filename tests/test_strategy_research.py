@@ -1,8 +1,16 @@
 from datetime import datetime, timedelta, timezone
 import json
+from pathlib import Path
 
 import pytest
 
+import application.services.strategy_research as strategy_research_module
+from application.services.strategy_research import (
+    StrategyResearchError,
+    run_strategy_research,
+)
+from data.market_data import MarketDataDownloadError, MarketDataValidationError
+from experiments.registry import ExperimentRegistry
 from scripts.run_strategy_research import main
 
 
@@ -93,6 +101,7 @@ def test_pipeline_runs_with_fake_provider_and_writes_report_and_experiment(
         str(path) for path in (tmp_path / "reports").glob("moving_average-*")
         if path.suffix in {".json", ".csv", ".html"}
     }
+    assert not tuple((tmp_path / "reports").rglob(".*.tmp*"))
 
 
 def test_momentum_regime_strategy_runs_without_converting_to_orders(
@@ -157,13 +166,16 @@ def test_provider_failure_has_clear_message_without_traceback_by_default(
 ) -> None:
     exit_code = main(
         ["SPY", "--output-dir", str(tmp_path / "reports")],
-        provider=FakeMarketDataProvider(RuntimeError("fake provider failure")),
+        provider=FakeMarketDataProvider(
+            MarketDataDownloadError("fake provider failure")
+        ),
     )
 
     output = capsys.readouterr()
     assert exit_code == 1
     assert "Unable to load validated market data for SPY" in output.err
     assert "fake provider failure" in output.err
+    assert "Error inesperado" not in output.err
     assert "Traceback" not in output.err
 
 
@@ -175,11 +187,150 @@ def test_debug_mode_shows_traceback_for_provider_failure(tmp_path, capsys) -> No
             "--output-dir",
             str(tmp_path / "reports"),
         ],
-        provider=FakeMarketDataProvider(RuntimeError("fake provider failure")),
+        provider=FakeMarketDataProvider(
+            MarketDataDownloadError("fake provider failure")
+        ),
     )
     output = capsys.readouterr()
     assert exit_code == 1
     assert "Traceback" in output.err
+
+
+def _run_direct(tmp_path, provider):
+    return run_strategy_research(
+        ("SPY",),
+        provider,
+        data_directory=tmp_path / "data",
+        output_directory=tmp_path / "reports",
+    )
+
+
+def test_provider_download_error_is_translated_with_original_cause(tmp_path) -> None:
+    cause = MarketDataDownloadError("provider unavailable")
+
+    with pytest.raises(MarketDataDownloadError, match="Unable to load") as raised:
+        _run_direct(tmp_path, FakeMarketDataProvider(cause))
+
+    assert raised.value.__cause__ is cause
+
+
+def test_market_data_validation_error_keeps_its_category(tmp_path) -> None:
+    class InvalidProvider:
+        def fetch(self, ticker: str):
+            return [{"timestamp": START}]
+
+    with pytest.raises(MarketDataValidationError):
+        _run_direct(tmp_path, InvalidProvider())
+
+
+def test_unexpected_provider_error_is_not_reclassified_as_download(tmp_path) -> None:
+    with pytest.raises(RuntimeError, match="programming defect") as raised:
+        _run_direct(
+            tmp_path,
+            FakeMarketDataProvider(RuntimeError("programming defect")),
+        )
+
+    assert raised.value.__cause__ is None
+
+
+def test_storage_io_error_is_translated_as_application_error_with_cause(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cause = OSError("storage unavailable")
+
+    def fail_save(*args, **kwargs):
+        raise cause
+
+    monkeypatch.setattr(strategy_research_module, "run_market_data_engine", fail_save)
+    with pytest.raises(StrategyResearchError, match="market-data storage") as raised:
+        _run_direct(tmp_path, FakeMarketDataProvider())
+
+    assert raised.value.__cause__ is cause
+
+
+@pytest.mark.parametrize(
+    ("writer_name", "extension"),
+    (
+        ("write_json_report", ".json"),
+        ("write_csv_report", ".csv"),
+        ("write_html_report", ".html"),
+    ),
+)
+def test_report_write_failure_cleans_staged_outputs_and_experiment(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    writer_name: str,
+    extension: str,
+) -> None:
+    def fail_writer(report, path):
+        path.write_text("partial output", encoding="utf-8")
+        raise OSError(f"synthetic {extension} write failure")
+
+    monkeypatch.setattr(strategy_research_module, writer_name, fail_writer)
+    with pytest.raises(OSError, match="synthetic"):
+        _run_direct(tmp_path, FakeMarketDataProvider())
+
+    report_root = tmp_path / "reports"
+    assert not tuple(report_root.glob(f"moving_average-*{extension}"))
+    assert not tuple((report_root / "experiments").glob("*.json"))
+    assert not tuple(report_root.rglob(".*.tmp*"))
+
+
+def test_experiment_publish_failure_rolls_back_reports_and_temporary_files(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    original_link = strategy_research_module.os.link
+
+    def fail_experiment_link(source, destination):
+        if Path(destination).parent.name == "experiments":
+            raise OSError("synthetic experiment registration failure")
+        return original_link(source, destination)
+
+    monkeypatch.setattr(strategy_research_module.os, "link", fail_experiment_link)
+    with pytest.raises(OSError, match="experiment registration"):
+        _run_direct(tmp_path, FakeMarketDataProvider())
+
+    report_root = tmp_path / "reports"
+    assert not tuple(report_root.glob("moving_average-*"))
+    assert not tuple((report_root / "experiments").glob("*.json"))
+    assert not tuple(report_root.rglob(".*.tmp*"))
+
+
+def test_experiment_preparation_failure_does_not_publish_reports(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def fail_prepare(self, **kwargs):
+        raise ValueError("synthetic experiment registration failure")
+
+    monkeypatch.setattr(ExperimentRegistry, "prepare", fail_prepare)
+    with pytest.raises(ValueError, match="experiment registration"):
+        _run_direct(tmp_path, FakeMarketDataProvider())
+
+    report_root = tmp_path / "reports"
+    assert not tuple(report_root.glob("moving_average-*"))
+    assert not tuple((report_root / "experiments").glob("*.json"))
+    assert not tuple(report_root.rglob(".*.tmp*"))
+
+
+def test_preexisting_report_is_not_overwritten_on_publication_failure(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        strategy_research_module,
+        "uuid4",
+        lambda: type("FixedId", (), {"hex": "fixed-run"})(),
+    )
+    report_root = tmp_path / "reports"
+    report_root.mkdir()
+    existing = report_root / "moving_average-fixed-run.csv"
+    existing.write_text("previous valid report\n", encoding="utf-8")
+
+    with pytest.raises(FileExistsError, match="Refusing to overwrite"):
+        _run_direct(tmp_path, FakeMarketDataProvider())
+
+    assert existing.read_text(encoding="utf-8") == "previous valid report\n"
+    assert not (report_root / "moving_average-fixed-run.json").exists()
+    assert not tuple(report_root.rglob(".*.tmp*"))
 
 
 def test_invalid_strategy_symbol_or_dates_return_argument_exit_code(

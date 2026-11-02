@@ -36,9 +36,10 @@ Status labels describe implemented behavior, not directory names:
 
 ### Existing contracts and conventions
 
-- The core data contract is `MarketBar`, `MarketData`, and `MarketDataProvider` in `data/market_data.py`. The engine normalizes tickers, orders bars chronologically, validates the normalized data, persists it, and reloads it.
+- The core data contract is `MarketBar`, `MarketData`, and `MarketDataProvider` in `data/market_data.py`. The engine normalizes tickers and timestamps, validates that input bars are already in chronological order (rejecting out-of-order bars rather than silently sorting them), persists valid data, and reloads it.
 - Data exceptions are `MarketDataError`, `MarketDataDownloadError`, and `MarketDataValidationError`. Quantitative modules expose their own domain errors, including feature, momentum, and regime errors; application services translate expected failures for their CLI boundary.
-- `scripts/research_asset.py` remains the single-ticker report path. The multi-asset service adds: explicit universe → Market Data Engine/validation → features → momentum factor/ranking → regime → strategy signal/position → risk → equal-weight allocation → per-asset backtests aggregated on common timestamps → performance and benchmark comparison → JSON/CSV/HTML report → experiment registry. Existing modules perform calculations; this flow has no LLM, paper broker, or real order execution.
+- `scripts/research_asset.py` remains the single-ticker report path. The multi-asset service adds: explicit universe → Market Data Engine/validation → features → momentum factor/ranking → regime → strategy signal/position → per-asset Risk Engine → `EqualWeightAllocator` → single-asset backtests in equal-capital sleeves aggregated on common timestamps → performance and benchmark comparison → JSON/CSV/HTML report → experiment registry. This is not yet a consolidated portfolio with shared cash, rebalancing, and global drawdown. Existing modules perform calculations; this flow has no LLM, paper broker, or real order execution.
+- The two public `ResearchReport` types are intentionally distinct: `application.services.research.ResearchReport` is the single-asset research summary, while `reporting.research_report.ResearchReport` is the structured report model for backtest/benchmark results and generated artifacts. Both names remain unchanged for compatibility.
 - Python 3.11 or newer is required. Runtime dependencies: `yfinance`, SciPy
   (portfolio optimization), `hmmlearn` (HMM regime analysis), VADER and
   XGBoost (Phase 7); development dependency: `pytest`. Packaging uses
@@ -56,12 +57,13 @@ weights, regime thresholds and the allowed regime states, and research CLI
 success/failure behavior. Research CLI provider failures are asserted not to
 show tracebacks.
 
-Additional characterization coverage confirms chronological normalized
-timestamps, the momentum result contract contains ranking/factor fields rather
-than order fields, repeated reports from identical synthetic history are
-byte-for-byte stable, and importing the current modules neither configures
-logging nor attempts provider/network access. These tests use synthetic data,
-fake providers, or a guarded subprocess; they do not depend on live market data.
+Additional characterization coverage confirms normalized timestamps, rejects
+out-of-order input bars, the momentum result contract contains ranking/factor
+fields rather than order fields, repeated reports from identical synthetic
+history are byte-for-byte stable, and importing the current modules neither
+configures logging nor attempts provider/network access. These tests use
+synthetic data, fake providers, or a guarded subprocess; they do not depend on
+live market data.
 Phase 1 adds offline tests for signal states/validation, insufficient SMA
 history, strategy position mapping, allowed-regime gating, explicit registry
 behavior, and deterministic strategy outputs.
@@ -194,3 +196,4 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Dependencies:** Existing multi-asset strategy-research service and typed comparison/reporting tools. `pyproject.toml` already contains all needed runtime dependencies; LangGraph is unnecessary for this fixed, deterministic workflow and no dependency was added.
 - **Tests required:** `tests/test_research_agent.py` checks deterministic tool selection, fake-provider execution, multi-strategy comparison, missing metric evidence warnings, policy rejection of unapproved tools/strategies, dry-run side-effect absence, traceability, and serializable outputs. Import characterization includes agent modules. Run the complete pytest suite.
 - **Acceptance:** Requests are structured and validated; the fixed allowlist is checked before any side effect; dry-run performs no data access or writes; execution results, comparisons, reports, warnings, and errors are traceable and based on actual domain outputs. No arbitrary code, strategy modification, credentials, LLM, real trading, or claims of future returns. Status remains **PARTIAL** until the full suite passes.
+- **Path boundary:** `AQT_RESEARCH_WORKSPACE` configures the workspace root (default `research_workspace`). Request paths are relative to that root; absolute paths, parent traversal, and symlink escapes are rejected.

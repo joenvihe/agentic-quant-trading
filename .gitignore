@@ -34,3 +34,4 @@ experiments/runs/
 .idea/
 .DS_Store
 Thumbs.db
+*.lnk

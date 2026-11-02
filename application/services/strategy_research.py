@@ -1,10 +1,14 @@
 """Orchestration for multi-asset strategy research using existing engines."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, time, timedelta, timezone
+import csv
+import json
 import math
+import os
 from pathlib import Path
+import tempfile
 from typing import Any
 from uuid import uuid4
 
@@ -17,12 +21,14 @@ from data.market_data import (
     MarketData,
     MarketDataDownloadError,
     MarketDataProvider,
+    MarketDataValidationError,
     normalize_ticker,
 )
 from evaluation.benchmark import buy_and_hold_benchmark
 from evaluation.compare import PerformanceComparison, compare_performance
 from evaluation.types import PerformanceMetrics
 from experiments.registry import ExperimentRegistry
+from experiments.storage import _stage_experiment
 from factors.momentum import MomentumRank, rank_momentum
 from features.engine import FeatureSeries, calculate_features
 from portfolio.allocation import EqualWeightAllocator
@@ -116,9 +122,15 @@ def run_strategy_research(
     for symbol in universe.get_symbols():
         try:
             loaded = run_market_data_engine(symbol, provider, Path(data_directory))
-        except Exception as exc:
+        except MarketDataDownloadError as exc:
             raise MarketDataDownloadError(
                 f"Unable to load validated market data for {symbol}: {exc}"
+            ) from exc
+        except MarketDataValidationError:
+            raise
+        except OSError as exc:
+            raise StrategyResearchError(
+                f"Unable to access market-data storage for {symbol}: {exc}"
             ) from exc
         feature_history[symbol] = loaded.market_data
         filtered = _filter_dates(loaded.market_data, start_date, end_date)
@@ -239,15 +251,11 @@ def run_strategy_research(
         warnings=warnings,
         output_files=tuple(str(path) for path in output_files),
     )
-    write_json_report(report, output_files[0])
-    write_csv_report(report, output_files[1])
-    write_html_report(report, output_files[2])
-
     registry = ExperimentRegistry(
         output_root / "experiments",
         repository_root=Path(__file__).resolve().parents[2],
     )
-    experiment = registry.register(
+    experiment_record = registry.prepare(
         strategy_name=strategy_name,
         strategy_parameters=parameters,
         data=aligned_data,
@@ -258,14 +266,121 @@ def run_strategy_research(
         output_files=tuple(str(path) for path in output_files),
         warnings=warnings,
     )
+    staged_files: list[tuple[Path, Path]] = []
+    try:
+        writers = (
+            (write_json_report, output_files[0]),
+            (write_csv_report, output_files[1]),
+            (write_html_report, output_files[2]),
+        )
+        for writer, destination in writers:
+            staged_files.append(_stage_report(report, destination, writer))
+        staged_files.append(_stage_experiment(experiment_record, registry.storage_directory))
+        _publish_staged_files(staged_files)
+    except Exception as exc:
+        for cleanup_error in _cleanup_staged_files(staged_files):
+            exc.add_note(f"Staged artifact cleanup failed: {cleanup_error}")
+        raise
+
     return StrategyResearchResult(
         report=report,
         benchmark=combined_benchmark,
         comparison=comparison,
         metrics=metrics,
-        experiment=asdict(experiment),
+        experiment=asdict(experiment_record),
         output_files=output_files,
     )
+
+
+def _stage_report(
+    report: ResearchReport,
+    destination: Path,
+    writer: Callable[[ResearchReport, str | Path], Path],
+) -> tuple[Path, Path]:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{destination.stem}-",
+        suffix=f".tmp{destination.suffix}",
+        dir=destination.parent,
+    )
+    os.close(descriptor)
+    temporary_path = Path(temporary_name)
+    try:
+        writer(report, temporary_path)
+        _validate_staged_report(temporary_path, destination.suffix)
+    except Exception as exc:
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError as cleanup_error:
+            exc.add_note(f"Staged report cleanup failed: {cleanup_error}")
+        raise
+    return temporary_path, destination
+
+
+def _validate_staged_report(path: Path, suffix: str) -> None:
+    if suffix == ".json":
+        with path.open(encoding="utf-8") as file:
+            if not isinstance(json.load(file), dict):
+                raise ValueError("Staged JSON report must contain an object.")
+    elif suffix == ".csv":
+        with path.open(encoding="utf-8", newline="") as file:
+            rows = csv.reader(file)
+            header = next(rows, None)
+            if header != [
+                "section",
+                "timestamp",
+                "symbol",
+                "field",
+                "value",
+                "details",
+            ]:
+                raise ValueError("Staged CSV report has an invalid header.")
+            if next(rows, None) is None:
+                raise ValueError("Staged CSV report must contain a summary row.")
+    elif suffix == ".html":
+        content = path.read_text(encoding="utf-8")
+        if (
+            not content.lstrip().lower().startswith("<!doctype html>")
+            or not content.rstrip().lower().endswith("</html>")
+        ):
+            raise ValueError("Staged HTML report is incomplete.")
+    else:
+        raise ValueError(f"Unsupported staged report format: {suffix}.")
+
+
+def _publish_staged_files(staged_files: Sequence[tuple[Path, Path]]) -> None:
+    published: list[Path] = []
+    try:
+        for temporary_path, destination in staged_files:
+            if destination.exists() or destination.is_symlink():
+                raise FileExistsError(f"Refusing to overwrite {destination}.")
+            os.link(temporary_path, destination)
+            published.append(destination)
+            temporary_path.unlink()
+    except Exception as exc:
+        cleanup_errors = _cleanup_staged_files(staged_files, published)
+        for cleanup_error in cleanup_errors:
+            exc.add_note(f"Staged artifact cleanup failed: {cleanup_error}")
+        raise
+
+
+def _cleanup_staged_files(
+    staged_files: Sequence[tuple[Path, Path]],
+    published: Sequence[Path] = (),
+) -> tuple[OSError, ...]:
+    errors: list[OSError] = []
+    published_set = set(published)
+    for temporary_path, destination in reversed(staged_files):
+        if destination in published_set:
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError as exc:
+                errors.append(exc)
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError as exc:
+            errors.append(exc)
+    return tuple(errors)
 
 
 def _normalize_symbols(symbols: Sequence[str]) -> tuple[str, ...]:

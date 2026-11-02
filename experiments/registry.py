@@ -36,6 +36,36 @@ class ExperimentRegistry:
         warnings: tuple[str, ...] | list[str] = (),
         timestamp: datetime | None = None,
     ) -> ExperimentRecord:
+        record = self.prepare(
+            strategy_name=strategy_name,
+            strategy_parameters=strategy_parameters,
+            data=data,
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date,
+            metrics=metrics,
+            output_files=output_files,
+            warnings=warnings,
+            timestamp=timestamp,
+        )
+        save_experiment(record, self.storage_directory)
+        return record
+
+    def prepare(
+        self,
+        *,
+        strategy_name: str,
+        strategy_parameters: Mapping[str, Any],
+        data: Any,
+        symbols: tuple[str, ...] | list[str],
+        start_date: datetime | None,
+        end_date: datetime | None,
+        metrics: Mapping[str, Any],
+        output_files: tuple[str, ...] | list[str] = (),
+        warnings: tuple[str, ...] | list[str] = (),
+        timestamp: datetime | None = None,
+    ) -> ExperimentRecord:
+        """Validate and construct metadata without publishing it."""
         if not strategy_name.strip():
             raise ValueError("strategy_name cannot be empty.")
         if timestamp is None:
@@ -58,7 +88,7 @@ class ExperimentRegistry:
         if len(set(normalized_symbols)) != len(normalized_symbols):
             raise ValueError("symbols must be unique.")
 
-        record = ExperimentRecord(
+        return ExperimentRecord(
             experiment_id=uuid4().hex,
             timestamp=timestamp,
             strategy_name=strategy_name,
@@ -72,8 +102,6 @@ class ExperimentRegistry:
             output_files=tuple(str(item) for item in output_files),
             warnings=tuple(str(item) for item in warnings),
         )
-        save_experiment(record, self.storage_directory)
-        return record
 
     def load(self, experiment_id: str) -> dict[str, Any]:
         return load_experiment(experiment_id, self.storage_directory)
