@@ -73,6 +73,23 @@ def test_valid_ticker_runs_pipeline_and_renders_report(
     assert output.err == ""
 
 
+def test_report_is_deterministic_for_identical_market_data(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    provider = FakeProvider()
+    install_provider(monkeypatch, provider)
+    monkeypatch.setenv("AQT_DATA_DIR", str(tmp_path))
+
+    first_exit_code = research_asset.main(["SPY"])
+    first_output = capsys.readouterr()
+    second_exit_code = research_asset.main(["SPY"])
+    second_output = capsys.readouterr()
+
+    assert first_exit_code == second_exit_code == 0
+    assert first_output.out == second_output.out
+    assert first_output.err == second_output.err == ""
+
+
 def test_rejects_invalid_ticker_without_provider_call(
     monkeypatch, capsys
 ) -> None:

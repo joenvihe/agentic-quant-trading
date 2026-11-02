@@ -27,6 +27,22 @@ Status labels describe implemented behavior, not directory names:
 - Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, and `tests/test_smoke.py`.
 - The package markers in `strategies/`, `backtest/`, `evaluation/`, `risk/`, `portfolio/`, `agents/`, and `app/` do not indicate implemented capabilities.
 
+### Current regression coverage
+
+The existing offline pytest suite characterizes Market Data normalization and
+validation (including duplicate/out-of-order timestamps and invalid OHLC),
+feature windows and insufficient history, momentum rankings and configurable
+weights, regime thresholds and the allowed regime states, and research CLI
+success/failure behavior. Research CLI provider failures are asserted not to
+show tracebacks.
+
+Additional characterization coverage confirms chronological normalized
+timestamps, the momentum result contract contains ranking/factor fields rather
+than order fields, repeated reports from identical synthetic history are
+byte-for-byte stable, and importing the current modules neither configures
+logging nor attempts provider/network access. These tests use synthetic data,
+fake providers, or a guarded subprocess; they do not depend on live market data.
+
 ## Target architecture
 
 Keep responsibilities separated and data flow explicit:

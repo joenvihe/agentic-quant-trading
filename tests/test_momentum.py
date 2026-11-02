@@ -1,3 +1,4 @@
+from dataclasses import fields
 from datetime import datetime, timedelta, timezone
 import math
 
@@ -68,6 +69,18 @@ def test_ranks_all_momentum_horizons_and_calculates_absolute_momentum() -> None:
     assert ranking[0].percentile_rank == 100
     assert ranking[-1].percentile_rank == 0
     assert ranking[0].relative_momentum["12m"] == 100
+    assert {field.name for field in fields(ranking[0])} == {
+        "rank",
+        "ticker",
+        "momentum_1m",
+        "momentum_3m",
+        "momentum_6m",
+        "momentum_12m",
+        "absolute_momentum",
+        "relative_momentum",
+        "percentile_rank",
+        "composite_score",
+    }
 
 
 def test_composite_weights_are_applied_from_configuration() -> None:

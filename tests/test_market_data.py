@@ -43,6 +43,9 @@ def test_normalizes_valid_rows_and_naive_timestamps_to_utc() -> None:
     assert market_data.bars[0].timestamp == datetime(
         2024, 1, 2, tzinfo=timezone.utc
     )
+    assert [bar.timestamp for bar in market_data.bars] == sorted(
+        bar.timestamp for bar in market_data.bars
+    )
     assert market_data.bars[0].adjusted_close == 103.5
 
 
