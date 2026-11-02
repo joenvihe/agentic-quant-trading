@@ -32,13 +32,15 @@
   señales/factores y régimen en `TargetPosition`. Incluye el mapeo
   `MovingAverageStrategy`, la estrategia long-only `MomentumRegimeStrategy` y
   un `StrategyRegistry` de registro explícito.
-- `risk/`: futuras métricas y reglas de análisis del riesgo.
+- `risk/`: motor puro de aprobación y sizing de exposición; aplica límites por
+  activo/cartera, volatility targeting opcional y circuit breaker de drawdown.
 - `backtest/`: simulación diaria, long-only y de un activo. Recibe posiciones
   objetivo y ejecuta la información de cierre en la apertura del bar siguiente,
   contabilizando comisión y slippage; no realiza trading real.
 - `portfolio/`: futura agregación y análisis de carteras.
 - `evaluation/`: métricas de rendimiento, benchmark Buy and Hold y comparación
-  entre resultados simulados.
+  entre resultados simulados; incluye splits temporales, validación walk-forward
+  y resumen de robustez.
 - `agents/`: reservado para una fase posterior; no contiene agentes ni lógica
   de LLM.
 - `app/`: futuros puntos de entrada e integración.
@@ -107,7 +109,37 @@ en `docs/performance_metrics.md`; ratios sin denominador válido se representan
 como `None`.
 
 Esto es una simulación de investigación. No hay órdenes reales, broker,
-walk-forward, gestión de riesgo, optimización de portfolio, ML ni agentes.
+optimización de portfolio, ML ni agentes.
+
+## Walk-Forward Validation + Risk — Fase 3
+
+`evaluation.generate_time_splits` crea ventanas expanding o rolling en orden
+cronológico desde barras diarias; exige timestamps UTC-aware, únicos y
+ordenados, y garantiza `train_end < test_start`. No se barajan observaciones.
+`evaluation.run_walk_forward` evalúa candidatos explícitos solo con la
+ventana train, maximiza por defecto (o minimiza si se configura) una métrica
+configurable y ejecuta el candidato elegido con datos exclusivamente de la
+ventana test.
+El callback recibe una sola ventana cada vez y debe construir señales y
+posiciones usando solo sus datos. Los resultados incluyen ventana, candidatos,
+selección, métricas in-sample/out-of-sample y warnings. Si ninguna métrica
+train es válida, no se selecciona una configuración y test no se evalúa.
+
+El test window no incluye datos de train para warm-up. Por ello, estrategias
+que necesiten contexto deben proporcionar historial suficiente dentro de cada
+ventana test o el callback debe gestionar warm-up sin usar observaciones test
+futuras.
+
+`risk.evaluate_risk` es una función pura: recibe la exposición solicitada,
+exposición actual, límites, volatilidad realizada anualizada opcional y
+drawdown actual como fracción positiva. Puede reducir peso por activo y
+exposición agregada, aplicar volatility targeting o bloquear la exposición al
+alcanzar el drawdown máximo. Devuelve un `RiskDecision` con peso aprobado,
+estado y reason codes. No elige estrategias, modifica precios ni ejecuta
+órdenes. Riesgo no está conectado automáticamente al backtest en esta fase.
+
+Walk-forward y riesgo son herramientas de investigación; no implementan
+portfolio, ML, ejecución, ni agentes.
 
 ## Momentum Engine v0.1
 

@@ -14,7 +14,9 @@ Status labels describe implemented behavior, not directory names:
 - **[PARTIAL] Application and reporting:** `application/services/research.py` orchestrates the current single-asset research flow and `scripts/research_asset.py` renders a console report. It does not implement signals, strategies, backtests, portfolio construction, or a full reporting/experiment system.
 - **[PARTIAL] Signals + strategies:** `signals/` provides validated signal values and a long-only moving-average signal using existing SMA features. `strategies/` maps signals and existing momentum/regime outputs into target positions and has an explicit registry. Phase 1 acceptance awaits a successful full-suite run.
 - **[PARTIAL] Backtest + evaluation:** a deterministic daily, single-asset, long-only engine with next-bar execution and transaction costs is implemented, along with performance metrics and a causal Buy and Hold benchmark. Phase 2 acceptance awaits a successful full-suite run.
-- **[TODO] Risk and portfolio:** the separate `risk/` and `portfolio/` packages contain only package markers.
+- **[PARTIAL] Walk-forward validation:** `evaluation/` provides expanding/rolling temporal splits, train-only parameter selection, test-only evaluation, and OOS robustness summaries. Full-suite validation remains pending.
+- **[PARTIAL] Risk Engine:** `risk/` provides explicit exposure limits, optional volatility targeting, and drawdown circuit-breaker decisions without executing trades or selecting strategies. Full-suite validation remains pending.
+- **[TODO] Portfolio:** `portfolio/` contains only a package marker.
 - **[TODO] Agent and application tools:** `agents/` and `app/` contain package markers only; there is no agent runtime or application-tool layer.
 - **[TODO] HMM regime, fundamental analysis, universe selection, sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
@@ -26,7 +28,7 @@ Status labels describe implemented behavior, not directory names:
 - The flow currently implemented is: ticker → Market Data Engine → normalized `MarketData` → Feature Engine → Momentum factor and Regime Engine → research service → console report.
 - Python 3.11 or newer is required. Runtime dependency: `yfinance`; development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
 - Code uses type hints, dataclasses (including immutable result/configuration objects), explicit domain errors, snake_case names, and pytest. Existing tests use synthetic rows and fake providers; preserve their offline behavior.
-- Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, `tests/test_signals.py`, `tests/test_strategies.py`, `tests/test_backtest.py`, and `tests/test_smoke.py`.
+- Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, `tests/test_signals.py`, `tests/test_strategies.py`, `tests/test_backtest.py`, `tests/test_walk_forward.py`, `tests/test_risk.py`, and `tests/test_smoke.py`.
 - The package markers in `risk/`, `portfolio/`, `agents/`, and `app/` do not indicate implemented capabilities.
 
 ### Current regression coverage
@@ -50,6 +52,9 @@ behavior, and deterministic strategy outputs.
 Phase 2 adds synthetic tests for flat and buy/hold curves, delayed execution,
 entry/exit accounting, transaction costs, input validation, defined metric
 values, benchmark comparison, and deterministic results.
+Phase 3 adds synthetic temporal split and callback-isolation tests, insufficient
+history checks, risk limit/volatility/drawdown/configuration tests, and
+determinism checks.
 
 ## Target architecture
 
@@ -87,13 +92,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_backtest.py` uses synthetic fixtures for flat and buy/hold results, delayed next-bar execution, entry/exit, costs, invalid prices/capital/positions, flat/known drawdown metrics, undefined no-trade metrics, benchmark and determinism. The complete pytest suite must pass.
 - **Acceptance:** Closing-bar decisions execute no earlier than the next bar's open; purchases cannot create margin; costs and metric conventions are documented; identical inputs produce identical results. Current status remains **PARTIAL** while full-suite execution is blocked by the local Windows application-control policy. Mark **COMPLETE only after the full suite passes**.
 
-### Phase 3 — Walk-Forward Validation + Risk [TODO]
+### Phase 3 — Walk-Forward Validation + Risk [PARTIAL]
 
 - **Objective:** Add out-of-sample, time-ordered validation and explicit risk constraints.
-- **Modules affected:** `evaluation/`, `risk/`, `backtest/`, strategy configuration, and tests.
-- **Dependencies:** Phases 1–2 and agreed risk/validation contracts.
-- **Tests required:** Split-boundary and embargo tests where applicable; leakage checks; risk-limit boundary tests; deterministic synthetic scenarios including missing and extreme observations.
-- **Acceptance:** Validation preserves chronological order and isolates out-of-sample data; risk decisions are explicit, testable, and enforced before portfolio/backtest actions.
+- **Modules affected:** `evaluation/splits.py`, `evaluation/walk_forward.py`, `evaluation/robustness.py`, `risk/`, documentation, and tests. No portfolio modules or backtest behavior modified.
+- **Dependencies:** Existing `MarketData`, `BacktestResult`, and `PerformanceMetrics` contracts. The evaluator callback receives one chronological partition at a time; parameter candidates are explicit and selected by optimizing a configured train metric (maximize by default, optionally minimize). Risk receives requested weight, current exposure, optional annualized realized volatility, and optional positive-fraction drawdown.
+- **Tests required:** `tests/test_walk_forward.py` covers expanding/rolling boundaries, insufficient history, train/test callback isolation, selection and OOS evaluation. `tests/test_risk.py` covers strategy approval, per-asset and aggregate exposure limits, volatility targeting, drawdown blocking, invalid configuration/inputs, and determinism. The complete pytest suite must pass.
+- **Acceptance:** Splits are ordered and disjoint (`train_end < test_start`), candidates are selected only on train, and only the selected candidate is evaluated on test. Risk returns explicit approved/reduced/rejected weights and reasons, without strategy selection or execution. Current status remains **PARTIAL** while full-suite execution is blocked by the local Windows application-control policy. Mark **COMPLETE only after the full suite passes**.
 
 ### Phase 4 — Portfolio Optimization [TODO]
 

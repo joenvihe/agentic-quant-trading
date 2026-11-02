@@ -57,9 +57,44 @@ The Buy and Hold benchmark submits a full-exposure target at the first bar's
 close and consequently enters at the next bar's open, following the same
 causality convention as strategy positions. It is not a live-trading adapter.
 
+## Temporal walk-forward evaluation
+
+`evaluation.generate_time_splits` uses bar counts to produce expanding or
+rolling windows. It validates ordered, unique, timezone-aware timestamps and
+requires strict separation between the final train timestamp and first test
+timestamp. Data is never shuffled.
+
+`evaluation.run_walk_forward` passes only the train slice to candidate
+evaluations, selects the candidate with the highest configured finite metric,
+then passes only the test slice and selected parameters to the out-of-sample
+evaluation. Selection maximizes by default; `maximize_metric=False` selects
+the minimum instead. The callback must generate any decisions using only the
+slice it receives. A test slice does not include train-period warm-up
+observations.
+`evaluation.summarize_robustness` aggregates valid out-of-sample returns across
+folds and retains fold warnings.
+
+## Risk decisions
+
+`risk.evaluate_risk` is independent of strategy selection and execution.
+`RiskLimits` caps per-asset weight and total portfolio exposure; when
+`target_volatility` is configured, exposure is scaled by target volatility
+divided by current annualized realized volatility, capped at the requested
+weight. Missing/invalid realized volatility fails closed to zero exposure when
+targeting is enabled. The optional drawdown circuit breaker blocks exposure
+when positive-fraction drawdown is at or above `max_drawdown`.
+
+`risk.calculate_realized_volatility` estimates annualized volatility from
+finite, positive closing prices and log returns; it returns `None` when there
+are fewer than three closes. The caller must pass the estimate that was
+available at the strategy decision timestamp. The Risk Engine returns an
+explicit decision and reason codes; it does not alter prices or send orders.
+
 ## Scope and limitations
 
 This implementation supports one asset, daily bars, long-only exposure from
 zero to one, and no leverage or short selling. It does not model taxes,
 dividends/corporate actions, order-book liquidity, partial fills, financing,
-intraday execution, walk-forward validation, or portfolio aggregation.
+or intraday execution. Walk-forward evaluation does not include training bars
+as warm-up context for its test windows. Portfolio aggregation is not
+implemented.

@@ -153,6 +153,25 @@ mismo modelo causal de entrada al siguiente bar.
 Consulta [`docs/performance_metrics.md`](docs/performance_metrics.md) para las
 definiciones, convenciones de costes y limitaciones.
 
+## Walk-forward y Risk Engine
+
+`evaluation.generate_time_splits` crea ventanas exclusivamente temporales,
+expanding o rolling, por conteo de barras. `evaluation.run_walk_forward`
+selecciona configuraciones candidatas optimizando una métrica configurable
+(maximizar por defecto, o minimizar) solo en train y evalúa la elegida solo en
+test. Proporciona un callback
+`evaluate(MarketData, parameters) -> BacktestResult`; el callback recibe
+exclusivamente los datos de la partición actual. Los splits no barajan datos y
+requieren suficiente historial. Los resultados incluyen ventana, candidatos,
+parámetro elegido, métricas in-sample/out-of-sample y warnings.
+
+`risk.evaluate_risk` limita peso por activo y exposición total, puede ajustar
+el peso según volatilidad realizada frente a un objetivo, y opcionalmente
+bloquea nuevas posiciones cuando el drawdown alcanza `max_drawdown`. Devuelve
+un `RiskDecision` con razones explícitas; no cambia precios, no selecciona
+estrategias ni ejecuta órdenes. Estos controles todavía no están integrados
+automáticamente en el backtest.
+
 ## Configuración
 
 La configuración está centralizada en `config/settings.py` y puede ajustarse
