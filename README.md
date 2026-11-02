@@ -3,12 +3,14 @@
 Proyecto educativo para construir progresivamente un sistema de investigación
 de swing trading basado en Python, herramientas cuantitativas e IA agéntica.
 
-## Alcance actual: Market Data, Feature y Momentum Engines v0.1
+## Alcance actual: Data, Feature, Momentum y Market Regime Engines v0.1
 
 Market Data Engine descarga OHLCV diario de Yahoo Finance, normaliza y valida
 las barras y las guarda localmente como CSV. Quant Feature Engine calcula
 indicadores deterministas desde ese modelo normalizado. Momentum Engine usa
 esas features para rankear un universo; no genera señales ni operaciones.
+Market Regime Engine clasifica por reglas deterministas dirección, fuerza,
+volatilidad y confirmación; tampoco genera recomendaciones de mercado.
 
 No se implementan estrategias, backtesting, ejecución de operaciones, broker,
 agentes, LLMs ni LangGraph.
@@ -63,6 +65,36 @@ iguales por defecto y configurables con `AQT_MOMENTUM_WEIGHT_1M`,
 `AQT_MOMENTUM_WEIGHT_3M`, `AQT_MOMENTUM_WEIGHT_6M` y
 `AQT_MOMENTUM_WEIGHT_12M`. El ranking es un factor cuantitativo, no una
 recomendación financiera.
+
+## Detectar régimen de mercado
+
+```powershell
+python -m scripts.detect_regime SPY
+```
+
+El comando obtiene datos mediante Market Data Engine, calcula las features
+existentes y devuelve `regime`, `metrics`, `evidence` y `reason_codes` en JSON.
+El baseline no usa machine learning, clustering, HMM ni LLM. Sus umbrales
+iniciales están definidos y validados en `config/regime.py`; cada uno puede
+modificarse desde el código o con su variable `AQT_REGIME_*` correspondiente:
+
+| Variable | Valor inicial | Uso |
+|---|---:|---|
+| `AQT_REGIME_BULL_STRENGTH_RETURN_6M` | 0.10 | Retorno 6M para fuerza alcista |
+| `AQT_REGIME_RANGE_ABS_RETURN_6M` | 0.10 | Límite estricto de retorno absoluto 6M para rango |
+| `AQT_REGIME_RANGE_BOLLINGER_WIDTH` | 0.10 | Límite estricto de ancho Bollinger para rango |
+| `AQT_REGIME_ELEVATED_REALIZED_VOLATILITY` | 0.30 | Volatilidad realizada anualizada elevada |
+| `AQT_REGIME_CHAOTIC_REALIZED_VOLATILITY` | 0.45 | Volatilidad realizada anualizada caótica |
+| `AQT_REGIME_ELEVATED_ATR_TO_SMA20` | 0.02 | ATR14/SMA20 elevado |
+| `AQT_REGIME_CHAOTIC_ATR_TO_SMA20` | 0.03 | ATR14/SMA20 caótico |
+| `AQT_REGIME_CONFIRMATION_MIN_AGREEMENTS` | 2 | Acuerdos mínimos de 3 criterios para confirmar |
+
+La volatilidad usa condiciones inclusivas (`>=`); el rango usa límites estrictos
+(`<`). Dirección compara SMA50 con SMA200. Confirmación requiere al menos dos
+criterios de tres: retornos 1M y 3M alineados juntos, SMA20 contra SMA50, y una
+aproximación `SMA20 * (1 + retorno 1M)` contra SMA50. Esta última es solo un proxy
+construido a partir de features, no un precio de cierre. El resultado es una
+clasificación descriptiva, no una recomendación de mercado.
 
 ## Configuración
 

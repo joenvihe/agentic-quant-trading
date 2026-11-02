@@ -21,7 +21,8 @@
   el contrato OHLCV normalizado de `data/`.
 - `factors/`: Momentum Engine rankea activos usando retornos y percentiles;
   no produce señales ni operaciones.
-- `regime/`: futuros análisis de regímenes de mercado.
+- `regime/`: Market Regime Engine clasifica dirección, fuerza, volatilidad y
+  confirmación con reglas deterministas y thresholds configurables.
 - `strategies/`: futuras hipótesis y señales de investigación; no contiene
   estrategias todavía.
 - `risk/`: futuras métricas y reglas de análisis del riesgo.
@@ -65,3 +66,17 @@ promedio ponderado de esos percentiles y el percentil final compara scores.
 Los pesos iguales por defecto se configuran con `AQT_MOMENTUM_WEIGHT_*`.
 El resultado es un factor de ranking, no una señal, un trade ni una
 recomendación de compra/venta.
+
+## Market Regime Engine v0.1
+
+`python -m scripts.detect_regime TICKER` descarga OHLCV mediante Data Engine,
+calcula exclusivamente las features existentes y devuelve `regime`, `metrics`,
+`evidence` y `reason_codes`. El baseline es determinista e interpretable; no
+usa machine learning, clustering, HMM ni LLM. Clasifica dirección comparando
+SMA50/SMA200; fuerza usando retornos 6M/12M; volatilidad con volatilidad
+realizada anualizada y ATR14/SMA20; confirmación con retornos, SMA20/SMA50 y
+un proxy de precio derivado de features. La precedencia es CHAOTIC, BEAR,
+BULL_VOLATILE, BULL_STRONG, RANGE y, para el resto o historial insuficiente,
+TRANSITION. Thresholds, valores iniciales, criterios y variables de entorno
+están documentados en el README y en `config/regime.py`. Es una clasificación
+descriptiva y no una recomendación de mercado.
