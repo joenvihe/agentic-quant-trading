@@ -52,6 +52,15 @@
   locales, sin navegador ni efectos durante imports.
 - `experiments/`: huellas SHA-256 canónicas y registro JSON de experimentos con
   redacción de claves sensibles y publicación atómica que no sobrescribe runs.
+- `sentiment/`: provider de noticias inyectable, fake local, VADER y agregación
+  temporal alineada a timestamps de features. La agregación solo considera
+  artículos publicados hasta el timestamp de cada observación; sentimiento es
+  una feature, no una señal ni una orden.
+- `models/`: construcción de datasets y targets de dirección futura con
+  timestamps separados, split temporal con purga de etiquetas que alcanzan el
+  test, escalado ajustado sobre train, clasificador logístico baseline,
+  XGBoost y métricas de clasificación. Las predicciones son `MLSignal`, nunca
+  órdenes; accuracy no representa rentabilidad.
 - `evaluation/`: métricas de rendimiento, benchmark Buy and Hold y comparación
   entre resultados simulados; incluye splits temporales, validación walk-forward
   y resumen de robustez.
@@ -123,7 +132,7 @@ en `docs/performance_metrics.md`; ratios sin denominador válido se representan
 como `None`.
 
 Esto es una simulación de investigación. No hay órdenes reales ni broker;
-ML y agentes quedan para fases posteriores.
+agentes quedan para fases posteriores.
 
 ## Walk-Forward Validation + Risk — Fase 3
 
@@ -234,6 +243,36 @@ temporal en el mismo directorio y publica mediante hard-link atómico con
 creación exclusiva; IDs existentes no se sobrescriben. Claves de metadata con
 nombres de credenciales/secretos se sustituyen por `[REDACTED]`. El registro es
 local y no sustituye un proveedor de almacenamiento distribuido.
+
+## Sentiment + modelos supervisados — Fase 7
+
+`sentiment.NewsProvider` es un contrato inyectable; `FakeNewsProvider` permite
+pruebas y fixtures sin Internet. `VaderSentimentScorer` carga VADER solo al
+instanciarse. `align_sentiment` calcula para cada timestamp un promedio
+compuesto, cantidad de noticias, dispersión y cobertura temporal usando una
+ventana trailing inclusiva; `merge_sentiment_features` puede añadir las tres
+columnas numéricas a `FeatureSeries` para construir datasets. Las noticias
+futuras se excluyen y una ventana sin noticias produce score/dispersión
+`None`, no cero.
+
+`models.build_ml_dataset` reutiliza `FeatureSeries` causal y crea el target
+binario de retorno forward con horizonte configurable. Cada muestra distingue
+`feature_timestamp` de `target_timestamp`; los últimos bars sin futuro se
+omiten. `temporal_train_test_split` no baraja, reserva el tramo cronológico
+final y purga del entrenamiento muestras cuyo target timestamp alcanza el
+inicio del test. `BaselineClassifier` ajusta su scaler solo sobre train y usa
+un modelo logístico reproducible con `random_state` obligatorio.
+`XGBoostClassifier` también exige semilla, usa un hilo y árboles `hist`; no
+estandariza variables porque los árboles no lo requieren. Ambas APIs devuelven
+`MLSignal` con clase/probabilidad y timestamp de features, no órdenes.
+`evaluate_classifier` devuelve accuracy, precision, recall, F1, ROC-AUC cuando
+ambas clases están presentes y matriz de confusión. Estas métricas de
+clasificación no equivalen a rentabilidad ni reemplazan un backtest OOS.
+
+VADER y XGBoost no estaban instalados en el entorno Python inspeccionado y se
+declaran como dependencias del proyecto. No se conecta ninguna API de noticias;
+el caller debe suministrar items y garantizar su procedencia y disponibilidad
+histórica.
 
 ## Momentum Engine v0.1
 

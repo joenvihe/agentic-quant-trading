@@ -23,7 +23,14 @@ Status labels describe implemented behavior, not directory names:
 - **[PARTIAL] Universe Selection:** static symbol provider, normalization/deduplication, injected data provider, and configurable screening filters are implemented. Full-suite validation remains pending.
 - **[PARTIAL] Reporting:** `reporting/` builds structured JSON, CSV, and escaped HTML reports from backtest results, existing metrics, and benchmark comparisons. Full-suite validation remains pending.
 - **[PARTIAL] Experiment Tracking:** `experiments/` provides canonical data fingerprints and atomic, exclusive JSON metadata storage with best-effort Git version and sensitive-key redaction. Full-suite validation remains pending.
-- **[TODO] Sentiment, supervised ML, and paper trading:** no implementations are present.
+- **[PARTIAL] Sentiment + supervised ML:** `sentiment/` provides fake/injected
+  news providers, VADER scores, trailing aggregation and point-in-time
+  alignment. `models/` builds forward direction targets from existing
+  features, performs purged chronological splits, fits a train-only
+  standardizer for its logistic baseline, provides seeded XGBoost, and reports
+  classification metrics. Full-suite validation remains pending; no real news
+  provider or trading signal/order conversion is included.
+- **[TODO] Paper trading:** no implementation is present.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
 
 ### Existing contracts and conventions
@@ -31,7 +38,10 @@ Status labels describe implemented behavior, not directory names:
 - The core data contract is `MarketBar`, `MarketData`, and `MarketDataProvider` in `data/market_data.py`. The engine normalizes tickers, orders bars chronologically, validates the normalized data, persists it, and reloads it.
 - Data exceptions are `MarketDataError`, `MarketDataDownloadError`, and `MarketDataValidationError`. Quantitative modules expose their own domain errors, including feature, momentum, and regime errors; application services translate expected failures for their CLI boundary.
 - The flow currently implemented is: ticker → Market Data Engine → normalized `MarketData` → Feature Engine → Momentum factor and Regime Engine → research service → console report.
-- Python 3.11 or newer is required. Runtime dependencies: `yfinance`, SciPy (portfolio optimization), and hmmlearn (HMM regime analysis); development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
+- Python 3.11 or newer is required. Runtime dependencies: `yfinance`, SciPy
+  (portfolio optimization), `hmmlearn` (HMM regime analysis), VADER and
+  XGBoost (Phase 7); development dependency: `pytest`. Packaging uses
+  setuptools and CI runs pytest.
 - Code uses type hints, dataclasses (including immutable result/configuration objects), explicit domain errors, snake_case names, and pytest. Existing tests use synthetic rows and fake providers; preserve their offline behavior.
 - Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, `tests/test_signals.py`, `tests/test_strategies.py`, `tests/test_backtest.py`, `tests/test_walk_forward.py`, `tests/test_risk.py`, and `tests/test_smoke.py`.
 - The package markers in `agents/` and `app/` do not indicate implemented capabilities.
@@ -67,6 +77,9 @@ ranking, point-in-time provider, and universe-filter tests.
 Phase 6 adds offline tests for reports with/without trades, JSON/CSV/HTML,
 escaping, benchmark comparisons, stable data fingerprints, atomic writes,
 loading, redaction, and overwrite prevention.
+Phase 7 adds fake-news and causal sentiment alignment tests, forward-target
+and timestamp checks, purged chronological dataset splits, train-only scaling,
+baseline/XGBoost reproducibility, and classification metric coverage.
 
 ## Target architecture
 
@@ -136,13 +149,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_reporting.py` covers reports without/with trades, format output, escaping, curves, warnings and benchmark comparisons. `tests/test_experiments.py` covers canonical fingerprints, metadata loading, timestamps, redaction, atomic publication failure, path safety, and non-overwrite behavior.
 - **Acceptance:** Reports serialize computed results without changing strategy decisions or recomputing metrics; HTML escapes content; writers only run on explicit paths. Experiment metadata is JSON, fingerprints are stable for equivalent inputs, writes publish atomically without overwriting existing IDs, and known secret fields are redacted. Current status remains **PARTIAL** until the full suite passes.
 
-### Phase 7 — Sentiment + Supervised ML [TODO]
+### Phase 7 — Sentiment + Supervised ML [PARTIAL]
 
-- **Objective:** Add optional sentiment and supervised models only after defining point-in-time inputs, labels, and evaluation methodology.
-- **Modules affected:** New sentiment/model modules, `data/` provider contracts as necessary, `features/` or `factors/` only for well-defined outputs, and `evaluation/`.
-- **Dependencies:** Phases 2, 3, and 6; approved data provenance, label construction, leakage controls, and dependency review.
-- **Tests required:** Offline provider fakes; label alignment and leakage tests; deterministic preprocessing/model tests where supported; baseline comparison and unavailable-data tests.
-- **Acceptance:** Model outputs are clearly distinguished from factors and signals; evaluation is out of sample and reproducible; optional dependencies and data assumptions are documented.
+- **Objective:** Add point-in-time sentiment features and reproducible binary direction classifiers without converting predictions into orders or interpreting accuracy as returns.
+- **Modules affected:** `sentiment/`, `models/`, package discovery, dependencies, import characterization, documentation, and tests. Existing feature/factor/signal/strategy engines remain unchanged.
+- **Dependencies:** Normalized `MarketData`, existing causal `FeatureSeries`, temporal validation conventions, and explicit news supplied through an injected provider. VADER and XGBoost were not found in the inspected Python 3.12 site-packages and are added because the requested VADER scorer and XGBoost implementation require them. No live news API or external service is introduced.
+- **Tests required:** `tests/test_sentiment.py` covers positive/negative VADER scores, fake provider, absent/future news and timestamp alignment. `tests/test_models.py` covers forward target alignment, missing features, temporal splitting and target-horizon purge, train-only scaling, reproducibility, classifier metrics, and seeded XGBoost. `tests/test_import_characterization.py` checks imports for side effects.
+- **Acceptance:** News scores never include items published after feature time; train/test are strictly temporal and training labels are purged at the test boundary; scaler fit uses train only; model results are `MLSignal`, not orders; classification metrics are explicitly not financial performance. Status remains **PARTIAL** until the full suite passes.
 
 ### Phase 8 — Paper Trading [TODO]
 

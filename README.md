@@ -19,6 +19,10 @@ simulan posiciones históricas con ejecución causal y calculan métricas, sin
 conectar brokers.
 Portfolio ofrece asignación equal-weight y optimización de Sharpe máximo usando
 series de retornos proporcionadas por el caller, sin descarga de precios.
+Sentiment produce features point-in-time desde noticias suministradas por un
+provider inyectado. Models construye targets futuros explícitos y entrena
+clasificadores con particiones temporales; las predicciones son valores
+`MLSignal`, no órdenes.
 
 El backtest es una simulación histórica determinista, no ejecución de
 operaciones. No se conectan brokers ni se implementan agentes, LLMs o LangGraph.
@@ -59,6 +63,47 @@ python -m pytest
 ```
 
 Las pruebas usan datos sintéticos deterministas y no contactan Yahoo Finance.
+
+## Sentiment y clasificación supervisada
+
+```powershell
+python -m pip install -e ".[dev]"
+```
+
+`sentiment.VaderSentimentScorer` calcula sentimiento compuesto de noticias
+entregadas por el caller. `FakeNewsProvider` y las pruebas funcionan sin APIs
+de noticias. La alineación utiliza solo publicaciones disponibles hasta cada
+timestamp; ausencia de noticias se representa con valores no disponibles.
+`merge_sentiment_features` agrega el score, conteo y dispersión a un
+`FeatureSeries` para que puedan seleccionarse al crear el dataset.
+
+Para modelos, construye `FeatureSeries` con `features.calculate_features` y
+`MarketData` normalizado, crea el dataset y separa train/test cronológicamente:
+
+```python
+from features.engine import calculate_features
+from models import (
+    BaselineClassifier,
+    build_ml_dataset,
+    evaluate_classifier,
+    temporal_train_test_split,
+)
+
+dataset = build_ml_dataset(market_data, calculate_features(market_data), 5, 0.01)
+split = temporal_train_test_split(dataset, test_fraction=0.2)
+model = BaselineClassifier(random_state=7).fit(split.train)
+predictions = model.predict(split.test)
+metrics = evaluate_classifier(
+    [sample.target for sample in split.test], predictions
+)
+```
+
+El target es 1 cuando el retorno futuro a `horizon` barras supera `threshold`;
+las muestras cuya etiqueta se solapa con el test se purgan del train. El scaler
+del baseline se ajusta únicamente con train. `XGBoostClassifier` ofrece el
+modelo basado en árboles con `random_state` obligatorio. Las métricas
+clasificatorias no son una medida de rentabilidad. Ni dataset ni modelos
+generan órdenes, y no se integra ningún proveedor real de noticias.
 
 ## Rankear momentum
 
