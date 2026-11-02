@@ -19,6 +19,9 @@ htmlcov/
 .mypy_cache/
 .ruff_cache/
 
+# Downloaded market data
+data/market_data/
+
 # Editors and operating systems
 .vscode/
 .idea/

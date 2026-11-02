@@ -3,12 +3,16 @@
 Proyecto educativo para construir progresivamente un sistema de investigación
 de swing trading basado en Python, herramientas cuantitativas e IA agéntica.
 
-## Alcance actual
+## Alcance actual: Market Data Engine v0.1
 
-Esta primera fase contiene únicamente la estructura y configuración iniciales
-del núcleo cuantitativo. No implementa estrategias, ejecución de operaciones,
-conexiones con brokers, envío de órdenes, uso de dinero real, LLMs ni agentes
-autónomos.
+El primer vertical slice descarga OHLCV diario desde Yahoo Finance, normaliza y
+valida las barras, las guarda localmente como CSV, las vuelve a leer y muestra
+un resumen. El adaptador de Yahoo está aislado detrás de la interfaz
+`MarketDataProvider`, por lo que las pruebas usan un proveedor sintético sin
+acceso a Internet.
+
+Todavía no implementa indicadores, momentum, estrategias, backtesting,
+ejecución de operaciones, broker, agentes, LLMs ni LangGraph.
 
 ## Requisitos
 
@@ -25,11 +29,27 @@ python -m venv .venv
 python -m pip install -e ".[dev]"
 ```
 
+## Descargar datos
+
+```powershell
+python -m scripts.download_market_data SPY
+```
+
+Los datos se guardan en `data/market_data/SPY.csv` por defecto. Se puede cambiar
+el directorio raíz mediante `AQT_DATA_DIR`.
+
+Yahoo Finance es una fuente gratuita de terceros, no oficial y sin garantía de
+disponibilidad ni estabilidad de API. La descarga necesita conexión a Internet;
+el comando termina con error si el proveedor no entrega datos válidos. El
+historial es diario y usa el máximo período que Yahoo tenga disponible.
+
 ## Pruebas
 
 ```powershell
 python -m pytest
 ```
+
+Las pruebas usan datos sintéticos deterministas y no contactan Yahoo Finance.
 
 ## Configuración
 
