@@ -39,6 +39,13 @@
 - `backtest/`: simulación diaria, long-only y de un activo. Recibe posiciones
   objetivo y ejecuta la información de cierre en la apertura del bar siguiente,
   contabilizando comisión y slippage; no realiza trading real.
+- `execution/`: protocolo de broker, órdenes market, posiciones y estado de
+  cuenta inmutables, y `PaperBroker` en memoria. Solo ejecuta con el precio
+  explícito recibido del caller, registra comisión/slippage y rechaza fondos
+  insuficientes o ventas cortas. No conecta servicios, recibe credenciales,
+  realiza networking, genera señales ni elige qué comprar.
+  Las órdenes market se resuelven sincrónicamente; `CANCELLED` forma parte del
+  contrato común, pero no hay órdenes pendientes que cancelar en este broker.
 - `portfolio/`: asignación equal-weight y optimización long-only de Sharpe
   máximo sobre series de retornos normalizados; no descarga datos ni ejecuta
   órdenes. El optimizador usa SciPy SLSQP con restricciones de caja y suma.
@@ -88,9 +95,10 @@ Yahoo Finance es una fuente de terceros sin garantía de disponibilidad; el
 comando no sustituye datos corregidos ni informa éxito si la descarga o
 validación falla. Las pruebas usan datos sintéticos y no necesitan Internet.
 
-Estos motores no identifican regímenes, predicen precios, conectan brokers,
-envían órdenes ni gestionan dinero real. Tampoco incluyen LLMs, LangGraph o
-agentes autónomos.
+Estos motores no conectan brokers reales ni gestionan dinero real. `PaperBroker`
+es una simulación local en memoria que puede ejecutar órdenes paper únicamente
+con precios explícitos proporcionados por el caller. Tampoco incluyen LLMs,
+LangGraph o agentes autónomos.
 
 ## Signals + Strategies — Fase 1
 

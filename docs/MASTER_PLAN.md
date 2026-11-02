@@ -30,7 +30,7 @@ Status labels describe implemented behavior, not directory names:
   standardizer for its logistic baseline, provides seeded XGBoost, and reports
   classification metrics. Full-suite validation remains pending; no real news
   provider or trading signal/order conversion is included.
-- **[TODO] Paper trading:** no implementation is present.
+- **[PARTIAL] Paper execution:** `execution/` defines order/status contracts, a broker protocol, immutable positions/account snapshots, and an in-memory deterministic `PaperBroker` for market buys/sells using only caller-supplied prices. No broker integration, network, credentials, signals, or strategy decisions are present. Full-suite validation remains pending.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
 
 ### Existing contracts and conventions
@@ -80,6 +80,9 @@ loading, redaction, and overwrite prevention.
 Phase 7 adds fake-news and causal sentiment alignment tests, forward-target
 and timestamp checks, purged chronological dataset splits, train-only scaling,
 baseline/XGBoost reproducibility, and classification metric coverage.
+Phase 8 adds offline paper-broker tests for buys/sells, insufficient funds,
+overselling, commission/slippage, account marking, invalid prices, duplicate
+order IDs and deterministic results.
 
 ## Target architecture
 
@@ -157,13 +160,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_sentiment.py` covers positive/negative VADER scores, fake provider, absent/future news and timestamp alignment. `tests/test_models.py` covers forward target alignment, missing features, temporal splitting and target-horizon purge, train-only scaling, reproducibility, classifier metrics, and seeded XGBoost. `tests/test_import_characterization.py` checks imports for side effects.
 - **Acceptance:** News scores never include items published after feature time; train/test are strictly temporal and training labels are purged at the test boundary; scaler fit uses train only; model results are `MLSignal`, not orders; classification metrics are explicitly not financial performance. Status remains **PARTIAL** until the full suite passes.
 
-### Phase 8 — Paper Trading [TODO]
+### Phase 8 — Paper Trading [PARTIAL]
 
-- **Objective:** Validate strategy-to-order lifecycle in a paper/sandbox environment without real trading.
-- **Modules affected:** New paper execution adapter, `application/`, `risk/`, configuration, and integration tests.
-- **Dependencies:** Phases 1–3, explicit order/risk contracts, and a sandbox-only provider with a clear operational safety boundary.
-- **Tests required:** Fake broker/sandbox tests, order-state transition tests, idempotency and failure/retry cases, risk-limit enforcement, and proof that test runs cannot reach a live endpoint.
-- **Acceptance:** Only sandbox/paper operations are possible by default; order lifecycle and failures are observable; no real credentials or live trading path are added.
+- **Objective:** Define a safe local paper-execution boundary with explicit orders, account state, deterministic fills, and no real broker activity.
+- **Modules affected:** `execution/`, package discovery, documentation, import characterization, and tests. No application-level strategy orchestration or live broker adapter is added.
+- **Dependencies:** Explicit caller-created market orders and caller-supplied finite prices; existing backtest cost configuration/calculation is reused for commissions and slippage.
+- **Tests required:** `tests/test_execution.py` covers buys/sells, order lifecycle, insufficient funds, overselling, commission/slippage, account equity/mark-to-market, invalid input, duplicate IDs, and determinism. Import characterization ensures no network activity.
+- **Acceptance:** Orders are only filled/rejected by an in-memory `PaperBroker`; position exposure is long-only; funds and prices are validated; all price data is explicit and local. No credentials, real broker, network calls, strategy decisions or live operations are included. Status remains **PARTIAL** until the full suite passes.
 
 ### Phase 9 — Application Tools [TODO]
 

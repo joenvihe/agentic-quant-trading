@@ -24,8 +24,14 @@ provider inyectado. Models construye targets futuros explícitos y entrena
 clasificadores con particiones temporales; las predicciones son valores
 `MLSignal`, no órdenes.
 
-El backtest es una simulación histórica determinista, no ejecución de
-operaciones. No se conectan brokers ni se implementan agentes, LLMs o LangGraph.
+`execution.PaperBroker` simula órdenes market de compra/venta con precios
+explícitos, long-only, comisión y slippage. No selecciona activos ni consume
+señales o estrategias. No se conectan brokers reales, no se realizan llamadas
+de red y no se usan credenciales. Las órdenes se resuelven inmediatamente; la
+cancelación no aplica a este flujo síncrono.
+
+El backtest y PaperBroker son simulaciones locales de investigación. No
+gestionan dinero real ni se implementan agentes, LLMs o LangGraph.
 
 ## Requisitos
 

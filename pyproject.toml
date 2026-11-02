@@ -30,6 +30,7 @@ include = [
     "backtest*",
     "config*",
     "data*",
+    "execution*",
     "evaluation*",
     "factors*",
     "features*",
