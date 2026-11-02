@@ -193,6 +193,40 @@ La asignación equal-weight y la covarianza no dependen de SciPy. Las series de
 retornos deben estar alineadas en frecuencia y rango temporal y reflejar solo
 información disponible en el momento de la decisión.
 
+## HMM Regime, Fundamental Engine y Universe Selection
+
+El clasificador determinista de régimen permanece como baseline.
+`regime.GaussianHMMRegime(random_state=42)` complementa ese resultado con un
+Gaussian HMM de dos estados por defecto, usando log returns y rango diario
+normalizado. Los IDs ocultos no se interpretan como alcistas/bajistas: se
+acompañan de etiquetas derivadas de drift, volatilidad y número de observaciones.
+`regime.compare_regimes` ofrece una comparación direccional descriptiva. El
+resultado reporta el último timestamp del histórico recibido; el histórico debe
+terminar en el corte temporal de la investigación. Para investigación histórica,
+el caller debe ajustar con barras disponibles hasta ese corte solamente.
+
+`fundamental.FundamentalDataProvider` recibe un corte `as_of` para que las
+fuentes entreguen solo información disponible entonces.
+`fetch_fundamental_snapshot` valida el límite temporal.
+El timestamp del snapshot corresponde a cuándo la información estuvo disponible
+públicamente, no solo al período fiscal reportado.
+`calculate_fundamental_metrics` calcula ROC, Earnings Yield y P/E; datos
+ausentes o denominadores no positivos resultan en `None`.
+`rank_fundamentals(metrics, as_of)` produce un ranking combinado y rechaza
+datos publicados después del corte, no señales ni órdenes.
+
+`universe.StaticUniverseProvider` normaliza símbolos y elimina duplicados.
+`universe.select_universe` recibe un corte `as_of` y aplica filtros configurables
+de precio mínimo, histórico mínimo y datos faltantes; la capitalización mínima
+solo filtra si hay un valor de capitalización disponible. Metadatos posteriores
+al corte se rechazan. Cada activo rechazado incluye una razón. Providers de
+datos son inyectados; no hay descargas automáticas. Un universo estático actual
+no es automáticamente point-in-time ni está libre de survivorship bias.
+
+El Gaussian HMM utiliza `hmmlearn`, añadido como dependencia necesaria para
+implementar el modelo solicitado. Requiere un `random_state` explícito; la suite
+debe instalar las dependencias del proyecto (`python -m pip install -e ".[dev]"`).
+
 ## Configuración
 
 La configuración está centralizada en `config/settings.py` y puede ajustarse

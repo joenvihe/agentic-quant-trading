@@ -24,7 +24,9 @@
 - `factors/`: Momentum Engine rankea activos usando retornos y percentiles;
   produce factores/rankings, no señales ni operaciones.
 - `regime/`: Market Regime Engine clasifica dirección, fuerza, volatilidad y
-  confirmación con reglas deterministas y thresholds configurables.
+  confirmación con reglas deterministas y thresholds configurables. El
+  complemento `GaussianHMMRegime` detecta estados estadísticos con seed
+  obligatorio y `compare_regimes` compara direcciones sin reemplazar el baseline.
 - `signals/`: contratos de señales y generadores que consumen resultados de
   features existentes. `MovingAverageCrossSignal` lee SMA disponibles, opera
   en modo long-only y no descarga datos.
@@ -40,6 +42,11 @@
 - `portfolio/`: asignación equal-weight y optimización long-only de Sharpe
   máximo sobre series de retornos normalizados; no descarga datos ni ejecuta
   órdenes. El optimizador usa SciPy SLSQP con restricciones de caja y suma.
+- `fundamental/`: contratos point-in-time para providers y snapshots, cálculos
+  de ROC, earnings yield y P/E, y ranking Magic Formula; no genera órdenes.
+- `universe/`: providers de universos explícitos, normalización/deduplicación
+  de símbolos y filtros deterministas de datos, precio, historial y
+  capitalización disponible.
 - `evaluation/`: métricas de rendimiento, benchmark Buy and Hold y comparación
   entre resultados simulados; incluye splits temporales, validación walk-forward
   y resumen de robustez.
@@ -159,6 +166,50 @@ numérico confiable; SLSQP se invoca con punto inicial y tolerancias fijos para
 resultados reproducibles. Si el solver falla o los datos implican volatilidad
 cero, se devuelve `AllocationResult(success=False)`; nunca se sustituye el
 resultado por equal-weight.
+
+## HMM Regime, Fundamentals y Universe Selection — Fase 5
+
+`regime.GaussianHMMRegime` no altera el clasificador determinista existente.
+Calcula log returns y rango diario `(high - low) / close`, exige un
+`random_state`, y permite configurar el número de estados (dos por defecto).
+Los IDs internos no tienen interpretación direccional: cada estado se reporta
+con `hidden_state_id`, etiqueta estadística y estadísticas de retorno medio,
+rango normalizado medio, volatilidad de retornos y observaciones. Las etiquetas
+usan drift observado y clasifican alta volatilidad respecto de la mediana de
+los estados con muestra suficiente; con menos de dos observaciones un estado se
+marca insuficiente por defecto. `compare_regimes` compara dirección determinista
+con drift HMM, y deja el acuerdo indefinido cuando la muestra no permite
+etiquetar o la clasificación determinista no aporta dirección.
+El resultado se limita al último timestamp del histórico recibido; el ajuste y
+las estadísticas usan el histórico hasta ese corte, no observaciones
+posteriores. Para una prueba histórica en una fecha pasada, el caller debe
+limitar `MarketData` a esa fecha antes de ajustar el modelo.
+
+`fundamental.FundamentalDataProvider` exige un corte temporal timezone-aware;
+`fetch_fundamental_snapshot` valida que el provider no retorne datos posteriores
+al corte. `FundamentalSnapshot.as_of` representa la fecha en que la información
+estuvo disponible públicamente, no necesariamente el cierre del período fiscal.
+ROC se calcula como EBIT / (capital de trabajo neto + activos fijos
+netos), earnings yield como EBIT / enterprise value y P/E como market cap /
+net income. Los campos faltantes y denominadores no positivos producen `None`,
+nunca cero. El ranking combinado recibe un corte común, rechaza datos
+posteriores, y promedia los rangos disponibles de ROC y earnings yield. El
+resultado no representa señales u órdenes.
+
+`universe.StaticUniverseProvider` normaliza tickers y elimina duplicados
+preservando el orden. `universe.select_universe` combina sus candidatos con un
+provider inyectado de metadatos y un corte `as_of` timezone-aware; los metadatos
+posteriores al corte se rechazan. Aplica filtros configurables de precio,
+historial, datos faltantes y capitalización. Una capitalización ausente no se
+trata como cero ni causa rechazo por capitalización; valores presentes no
+válidos se rechazan. Cada rechazo conserva un reason code explícito. La
+composición de un universo estático point-in-time depende del caller; una lista
+actual no debe reutilizarse como universo histórico por survivorship bias.
+
+`hmmlearn` no estaba declarado ni instalado en el entorno inspeccionado. Se
+declara como dependencia porque provee el Gaussian HMM solicitado; el HMM usa
+semilla explícita y covarianza diagonal. Los tres componentes son herramientas
+de análisis offline y no descargan datos por sí mismos.
 
 ## Momentum Engine v0.1
 

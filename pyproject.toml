@@ -9,6 +9,7 @@ description = "Educational quantitative research project for swing trading"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "hmmlearn>=0.3.2",
     "scipy>=1.11",
     "yfinance>=0.2.54",
 ]
@@ -30,12 +31,14 @@ include = [
     "evaluation*",
     "factors*",
     "features*",
+    "fundamental*",
     "portfolio*",
     "regime*",
     "risk*",
     "signals*",
     "scripts*",
     "strategies*",
+    "universe*",
 ]
 exclude = ["tests*"]
 

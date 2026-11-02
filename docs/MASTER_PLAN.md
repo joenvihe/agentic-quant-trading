@@ -18,7 +18,10 @@ Status labels describe implemented behavior, not directory names:
 - **[PARTIAL] Risk Engine:** `risk/` provides explicit exposure limits, optional volatility targeting, and drawdown circuit-breaker decisions without executing trades or selecting strategies. Full-suite validation remains pending.
 - **[PARTIAL] Portfolio:** `portfolio/` implements equal-weight allocation, sample covariance from aligned return series, and long-only maximum-Sharpe optimization with explicit bounds. Full-suite validation remains pending.
 - **[TODO] Agent and application tools:** `agents/` and `app/` contain package markers only; there is no agent runtime or application-tool layer.
-- **[TODO] HMM regime, fundamental analysis, universe selection, sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
+- **[PARTIAL] HMM regime:** `regime/hmm.py` adds seeded Gaussian HMM states and statistical labels alongside the deterministic baseline; regime comparison is implemented. Full-suite validation remains pending.
+- **[PARTIAL] Fundamental Engine:** provider/snapshot contracts, ROC, Earnings Yield, P/E, and a combined ranking are implemented. No external fundamental provider is included; full-suite validation remains pending.
+- **[PARTIAL] Universe Selection:** static symbol provider, normalization/deduplication, injected data provider, and configurable screening filters are implemented. Full-suite validation remains pending.
+- **[TODO] Sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
 
 ### Existing contracts and conventions
@@ -26,7 +29,7 @@ Status labels describe implemented behavior, not directory names:
 - The core data contract is `MarketBar`, `MarketData`, and `MarketDataProvider` in `data/market_data.py`. The engine normalizes tickers, orders bars chronologically, validates the normalized data, persists it, and reloads it.
 - Data exceptions are `MarketDataError`, `MarketDataDownloadError`, and `MarketDataValidationError`. Quantitative modules expose their own domain errors, including feature, momentum, and regime errors; application services translate expected failures for their CLI boundary.
 - The flow currently implemented is: ticker → Market Data Engine → normalized `MarketData` → Feature Engine → Momentum factor and Regime Engine → research service → console report.
-- Python 3.11 or newer is required. Runtime dependencies: `yfinance` and SciPy (for portfolio optimization); development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
+- Python 3.11 or newer is required. Runtime dependencies: `yfinance`, SciPy (portfolio optimization), and hmmlearn (HMM regime analysis); development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
 - Code uses type hints, dataclasses (including immutable result/configuration objects), explicit domain errors, snake_case names, and pytest. Existing tests use synthetic rows and fake providers; preserve their offline behavior.
 - Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, `tests/test_signals.py`, `tests/test_strategies.py`, `tests/test_backtest.py`, `tests/test_walk_forward.py`, `tests/test_risk.py`, and `tests/test_smoke.py`.
 - The package markers in `agents/` and `app/` do not indicate implemented capabilities.
@@ -55,6 +58,10 @@ values, benchmark comparison, and deterministic results.
 Phase 3 adds synthetic temporal split and callback-isolation tests, insufficient
 history checks, risk limit/volatility/drawdown/configuration tests, and
 determinism checks.
+Phase 4 adds synthetic allocation, covariance, constraints, optimizer failure,
+and determinism tests.
+Phase 5 adds synthetic seeded-HMM, regime-comparison, fundamental metrics and
+ranking, point-in-time provider, and universe-filter tests.
 
 ## Target architecture
 
@@ -108,13 +115,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_portfolio.py` covers equal weights and sums, bounds/long-only behavior, dominant asset, singular covariance, insufficient and invalid return history, duplicate symbols, explicit optimizer failure, and determinism. The complete pytest suite must pass.
 - **Acceptance:** Successful weights satisfy all configured bounds and sum to one; infeasible inputs or solver failures return explicit failure without silently falling back to equal-weight. Return/covariance assumptions and solver choice are documented. Current status remains **PARTIAL** until the full suite passes.
 
-### Phase 5 — HMM Regime + Fundamental + Universe Selection [TODO]
+### Phase 5 — HMM Regime + Fundamental + Universe Selection [PARTIAL]
 
-- **Objective:** Add separately validated regime modeling, point-in-time fundamental data, and a reproducible asset-universe selection process.
-- **Modules affected:** `regime/`, new fundamental/universe modules, `data/` provider contracts if needed, configuration, and tests.
-- **Dependencies:** Existing normalized data/features; point-in-time data availability and licensing/provenance requirements; model and universe-selection specifications.
-- **Tests required:** Synthetic regime sequences and state mapping tests; provider fakes; stale/missing fundamental data tests; survivorship/look-ahead checks; deterministic behavior for fixed model configuration.
-- **Acceptance:** The current deterministic baseline remains available; new model/fundamental/universe outputs are explicitly versioned, interpretable where possible, and cannot silently replace existing behavior.
+- **Objective:** Add seeded statistical regime analysis, point-in-time fundamental metrics/ranking, and reproducible universe screening without replacing the deterministic baseline or creating orders.
+- **Modules affected:** `regime/hmm.py`, `regime/comparison.py`, `fundamental/`, `universe/`, `pyproject.toml`, documentation, import characterization, and tests.
+- **Dependencies:** Normalized `MarketData`; caller/provider-supplied fundamentals ranked against an explicit `as_of` cutoff; injected universe metadata also fetched at an explicit cutoff. `hmmlearn>=0.3.2` is added because it provides the requested Gaussian HMM and was absent from the declared dependencies and inspected Python environment. No fundamental or universe data source is added.
+- **Tests required:** `tests/test_regime_hmm.py` covers seeded reproducibility, insufficient history, invalid time series, and deterministic/HMM comparison. `tests/test_fundamental.py` covers fake providers, point-in-time cutoff, missing values, ROC/EY/P-E, zero denominators, and combined ranking. `tests/test_universe.py` covers static provider normalization/deduplication, fake market metadata, price/history/missing-data/capitalization filters, and rejection reasons. The complete pytest suite must pass.
+- **Acceptance:** The deterministic regime engine remains unchanged and available; HMM labels are based on observed statistics rather than state IDs; fundamental missing values remain unavailable; universe filtering is deterministic and reports reasons. Current status remains **PARTIAL** until the full suite passes.
 
 ### Phase 6 — Reporting + Experiment Tracking [TODO]
 
