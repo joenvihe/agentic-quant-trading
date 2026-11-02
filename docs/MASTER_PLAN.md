@@ -16,7 +16,7 @@ Status labels describe implemented behavior, not directory names:
 - **[PARTIAL] Backtest + evaluation:** a deterministic daily, single-asset, long-only engine with next-bar execution and transaction costs is implemented, along with performance metrics and a causal Buy and Hold benchmark. Phase 2 acceptance awaits a successful full-suite run.
 - **[PARTIAL] Walk-forward validation:** `evaluation/` provides expanding/rolling temporal splits, train-only parameter selection, test-only evaluation, and OOS robustness summaries. Full-suite validation remains pending.
 - **[PARTIAL] Risk Engine:** `risk/` provides explicit exposure limits, optional volatility targeting, and drawdown circuit-breaker decisions without executing trades or selecting strategies. Full-suite validation remains pending.
-- **[TODO] Portfolio:** `portfolio/` contains only a package marker.
+- **[PARTIAL] Portfolio:** `portfolio/` implements equal-weight allocation, sample covariance from aligned return series, and long-only maximum-Sharpe optimization with explicit bounds. Full-suite validation remains pending.
 - **[TODO] Agent and application tools:** `agents/` and `app/` contain package markers only; there is no agent runtime or application-tool layer.
 - **[TODO] HMM regime, fundamental analysis, universe selection, sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
@@ -26,10 +26,10 @@ Status labels describe implemented behavior, not directory names:
 - The core data contract is `MarketBar`, `MarketData`, and `MarketDataProvider` in `data/market_data.py`. The engine normalizes tickers, orders bars chronologically, validates the normalized data, persists it, and reloads it.
 - Data exceptions are `MarketDataError`, `MarketDataDownloadError`, and `MarketDataValidationError`. Quantitative modules expose their own domain errors, including feature, momentum, and regime errors; application services translate expected failures for their CLI boundary.
 - The flow currently implemented is: ticker → Market Data Engine → normalized `MarketData` → Feature Engine → Momentum factor and Regime Engine → research service → console report.
-- Python 3.11 or newer is required. Runtime dependency: `yfinance`; development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
+- Python 3.11 or newer is required. Runtime dependencies: `yfinance` and SciPy (for portfolio optimization); development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
 - Code uses type hints, dataclasses (including immutable result/configuration objects), explicit domain errors, snake_case names, and pytest. Existing tests use synthetic rows and fake providers; preserve their offline behavior.
 - Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, `tests/test_signals.py`, `tests/test_strategies.py`, `tests/test_backtest.py`, `tests/test_walk_forward.py`, `tests/test_risk.py`, and `tests/test_smoke.py`.
-- The package markers in `risk/`, `portfolio/`, `agents/`, and `app/` do not indicate implemented capabilities.
+- The package markers in `agents/` and `app/` do not indicate implemented capabilities.
 
 ### Current regression coverage
 
@@ -100,13 +100,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_walk_forward.py` covers expanding/rolling boundaries, insufficient history, train/test callback isolation, selection and OOS evaluation. `tests/test_risk.py` covers strategy approval, per-asset and aggregate exposure limits, volatility targeting, drawdown blocking, invalid configuration/inputs, and determinism. The complete pytest suite must pass.
 - **Acceptance:** Splits are ordered and disjoint (`train_end < test_start`), candidates are selected only on train, and only the selected candidate is evaluated on test. Risk returns explicit approved/reduced/rejected weights and reasons, without strategy selection or execution. Current status remains **PARTIAL** while full-suite execution is blocked by the local Windows application-control policy. Mark **COMPLETE only after the full suite passes**.
 
-### Phase 4 — Portfolio Optimization [TODO]
+### Phase 4 — Portfolio Optimization [PARTIAL]
 
-- **Objective:** Construct portfolio weights subject to documented constraints and input assumptions.
-- **Modules affected:** `portfolio/`, `risk/`, `evaluation/`, configuration, and tests.
-- **Dependencies:** Phase 3 risk constraints and approved return/risk input contracts.
-- **Tests required:** Constraint and boundary tests, infeasible-input behavior, numerical stability, deterministic fixtures, and checks for use of only point-in-time data.
-- **Acceptance:** Weights meet configured constraints or return an explicit infeasibility error; assumptions and optimization objective are documented and reproducible.
+- **Objective:** Allocate portfolio weights deterministically and optimize long-only maximum Sharpe subject to explicit constraints.
+- **Modules affected:** `portfolio/`, documentation, dependency manifest, and tests. The implementation is standalone and does not alter Risk, Backtest, or Evaluation behavior.
+- **Dependencies:** Caller-provided, aligned normalized return series; SciPy `>=1.11` is required for its constrained nonlinear SLSQP solver. SciPy was not present in the declared dependencies or inspected Python environment; it is added because the maximum-Sharpe objective is fractional and nonlinear under box and full-investment constraints. Equal-weight and covariance calculations use only the standard library.
+- **Tests required:** `tests/test_portfolio.py` covers equal weights and sums, bounds/long-only behavior, dominant asset, singular covariance, insufficient and invalid return history, duplicate symbols, explicit optimizer failure, and determinism. The complete pytest suite must pass.
+- **Acceptance:** Successful weights satisfy all configured bounds and sum to one; infeasible inputs or solver failures return explicit failure without silently falling back to equal-weight. Return/covariance assumptions and solver choice are documented. Current status remains **PARTIAL** until the full suite passes.
 
 ### Phase 5 — HMM Regime + Fundamental + Universe Selection [TODO]
 

@@ -9,6 +9,7 @@ description = "Educational quantitative research project for swing trading"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "scipy>=1.11",
     "yfinance>=0.2.54",
 ]
 

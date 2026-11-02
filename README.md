@@ -3,7 +3,7 @@
 Proyecto educativo para construir progresivamente un sistema de investigación
 de swing trading basado en Python, herramientas cuantitativas e IA agéntica.
 
-## Alcance actual: Data, Features, Factors, Signals, Strategies y Backtest
+## Alcance actual: investigación cuantitativa y portfolio
 
 Market Data Engine descarga OHLCV diario de Yahoo Finance, normaliza y valida
 las barras y las guarda localmente como CSV. Quant Feature Engine calcula
@@ -13,9 +13,12 @@ Market Regime Engine clasifica por reglas deterministas dirección, fuerza,
 volatilidad y confirmación; tampoco genera recomendaciones de mercado.
 Signals transforma features disponibles en valores de señal explícitos.
 Strategies evalúa señales o factores junto con el régimen y devuelve una
-posición objetivo de investigación; un factor no se convierte directamente en señal y
-una posición objetivo no es una orden. Backtest y Evaluation simulan posiciones
-históricas con ejecución causal y calculan métricas, sin conectar brokers.
+posición objetivo de investigación; un factor no se convierte directamente
+en señal y una posición objetivo no es una orden. Backtest y Evaluation
+simulan posiciones históricas con ejecución causal y calculan métricas, sin
+conectar brokers.
+Portfolio ofrece asignación equal-weight y optimización de Sharpe máximo usando
+series de retornos proporcionadas por el caller, sin descarga de precios.
 
 El backtest es una simulación histórica determinista, no ejecución de
 operaciones. No se conectan brokers ni se implementan agentes, LLMs o LangGraph.
@@ -171,6 +174,24 @@ bloquea nuevas posiciones cuando el drawdown alcanza `max_drawdown`. Devuelve
 un `RiskDecision` con razones explícitas; no cambia precios, no selecciona
 estrategias ni ejecuta órdenes. Estos controles todavía no están integrados
 automáticamente en el backtest.
+
+## Asignación y optimización de portfolio
+
+`portfolio.EqualWeightAllocator` distribuye el capital por igual entre los
+símbolos recibidos y valida los límites configurados.
+`portfolio.estimate_covariance` estima la covarianza muestral desde series
+alineadas de retornos normalizados. `portfolio.MaximumSharpeOptimizer`
+maximiza Sharpe long-only, imponiendo `min_weight`, `max_weight` y suma de
+pesos igual a uno; `periods_per_year` y `risk_free_rate` controlan la
+anualización y el retorno libre de riesgo. No descarga precios ni conecta con
+Risk, Backtest o brokers. Si la optimización falla o la volatilidad resultante
+es cero, devuelve un resultado de fallo explícito, sin fallback a equal-weight.
+
+El optimizador usa SciPy `SLSQP`, añadido como dependencia necesaria para
+resolver de forma confiable el problema fraccional no lineal con restricciones.
+La asignación equal-weight y la covarianza no dependen de SciPy. Las series de
+retornos deben estar alineadas en frecuencia y rango temporal y reflejar solo
+información disponible en el momento de la decisión.
 
 ## Configuración
 

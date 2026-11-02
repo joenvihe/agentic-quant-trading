@@ -37,7 +37,9 @@
 - `backtest/`: simulación diaria, long-only y de un activo. Recibe posiciones
   objetivo y ejecuta la información de cierre en la apertura del bar siguiente,
   contabilizando comisión y slippage; no realiza trading real.
-- `portfolio/`: futura agregación y análisis de carteras.
+- `portfolio/`: asignación equal-weight y optimización long-only de Sharpe
+  máximo sobre series de retornos normalizados; no descarga datos ni ejecuta
+  órdenes. El optimizador usa SciPy SLSQP con restricciones de caja y suma.
 - `evaluation/`: métricas de rendimiento, benchmark Buy and Hold y comparación
   entre resultados simulados; incluye splits temporales, validación walk-forward
   y resumen de robustez.
@@ -108,8 +110,8 @@ modelo de ejecución al siguiente bar. Las métricas se encuentran documentadas
 en `docs/performance_metrics.md`; ratios sin denominador válido se representan
 como `None`.
 
-Esto es una simulación de investigación. No hay órdenes reales, broker,
-optimización de portfolio, ML ni agentes.
+Esto es una simulación de investigación. No hay órdenes reales ni broker;
+ML y agentes quedan para fases posteriores.
 
 ## Walk-Forward Validation + Risk — Fase 3
 
@@ -138,8 +140,25 @@ alcanzar el drawdown máximo. Devuelve un `RiskDecision` con peso aprobado,
 estado y reason codes. No elige estrategias, modifica precios ni ejecuta
 órdenes. Riesgo no está conectado automáticamente al backtest en esta fase.
 
-Walk-forward y riesgo son herramientas de investigación; no implementan
-portfolio, ML, ejecución, ni agentes.
+Walk-forward y riesgo son herramientas de investigación; no ejecutan órdenes.
+
+## Portfolio Optimization — Fase 4
+
+`portfolio.EqualWeightAllocator` asigna pesos iguales sin dependencias
+numéricas y verifica límites y suma totalmente invertida.
+`portfolio.MaximumSharpeOptimizer` recibe símbolos explícitos y series
+alineadas de retornos ya normalizados; no recibe precios ni descarga datos.
+Estima medias aritméticas y covarianza muestral, anualiza ambas con
+`periods_per_year` y maximiza el Sharpe respecto a `risk_free_rate`, respetando
+long-only, límites por activo y suma de pesos igual a uno.
+
+SciPy no estaba presente en las dependencias del proyecto ni en el entorno
+Python comprobado. Se declara `scipy>=1.11` porque el problema de Sharpe máximo
+es una optimización fraccional no lineal con restricciones y requiere un solver
+numérico confiable; SLSQP se invoca con punto inicial y tolerancias fijos para
+resultados reproducibles. Si el solver falla o los datos implican volatilidad
+cero, se devuelve `AllocationResult(success=False)`; nunca se sustituye el
+resultado por equal-weight.
 
 ## Momentum Engine v0.1
 
