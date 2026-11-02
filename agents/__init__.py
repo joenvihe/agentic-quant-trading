@@ -1,1 +1,1 @@
-"""Espacio reservado para componentes agénticos futuros."""
+"""Orchestration layer for approved quantitative research capabilities."""

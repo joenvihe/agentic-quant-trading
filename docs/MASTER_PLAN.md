@@ -18,7 +18,7 @@ Status labels describe implemented behavior, not directory names:
 - **[PARTIAL] Risk Engine:** `risk/` provides explicit exposure limits, optional volatility targeting, and drawdown circuit-breaker decisions without executing trades or selecting strategies. Full-suite validation remains pending.
 - **[PARTIAL] Portfolio:** `portfolio/` implements equal-weight allocation, sample covariance from aligned return series, and long-only maximum-Sharpe optimization with explicit bounds. Full-suite validation remains pending.
 - **[PARTIAL] Application tools:** `scripts/run_strategy_research.py` provides an injectable CLI and service for the existing quantitative pipeline without an LLM. General application APIs and `app/` tools remain unimplemented.
-- **[TODO] Agent:** `agents/` contains only a package marker; there is no agent runtime.
+- **[PARTIAL] Quant Research Agent:** `agents/research/` provides deterministic structured-request planning, an explicit tool/strategy allowlist, dry-run, traceable calls/evidence, multi-strategy comparison, and evidence-based reporting. It uses no LLM or LangGraph. Full-suite validation remains pending.
 - **[PARTIAL] HMM regime:** `regime/hmm.py` adds seeded Gaussian HMM states and statistical labels alongside the deterministic baseline; regime comparison is implemented. Full-suite validation remains pending.
 - **[PARTIAL] Fundamental Engine:** provider/snapshot contracts, ROC, Earnings Yield, P/E, and a combined ranking are implemented. No external fundamental provider is included; full-suite validation remains pending.
 - **[PARTIAL] Universe Selection:** static symbol provider, normalization/deduplication, injected data provider, and configurable screening filters are implemented. Full-suite validation remains pending.
@@ -91,6 +91,9 @@ configuration, hidden tracebacks, and CLI exit codes.
 Application-tool tests cover fake-provider research, causal backtests,
 timestamp-aligned strategy comparison, risk decisions, explicit optimizer
 failures, serializable responses, trace ID validation, and report path safety.
+Phase 10 adds fake-provider agent workflow tests for deterministic tool
+selection, multi-strategy comparison, missing-evidence warnings, dry-run,
+traceability, serialization, and blocking unapproved tools/strategies.
 
 ## Target architecture
 
@@ -184,10 +187,10 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_application_tools.py` covers each tool, request validation, trace IDs, serializable responses, failures/warnings, safe report paths, and injected fake providers. `tests/test_strategy_research.py` retains multi-asset integration coverage; import characterization checks tools for import-time side effects. Run the full pytest suite.
 - **Acceptance:** All tool requests are typed and validated; responses consistently include success, trace ID, serializable data, warnings, and errors; adapters reuse domain services and propagate explicit failures. Reporting is confined to a configured root and blocks traversal/symlink targets. No arbitrary code execution, real trading, LLM, or implicit import-time external effects. Existing multi-asset CLI remains available. Status remains **PARTIAL** until the full suite passes.
 
-### Phase 10 — Research Agent [TODO]
+### Phase 10 — Research Agent [PARTIAL]
 
-- **Objective:** Add an agent that plans and orchestrates approved research capabilities while leaving quantitative calculations to deterministic modules.
-- **Modules affected:** `agents/`, `application/`, approved tools, configuration, and tests.
-- **Dependencies:** Stable service/tool contracts, reporting and experiment metadata, and explicit permissions/safety boundaries.
-- **Tests required:** Tool-contract and orchestration tests with fakes; permission-boundary tests; deterministic workflow tests where applicable; tests proving the agent cannot bypass risk controls or invoke real trading.
-- **Acceptance:** The agent only composes authorized capabilities, records its inputs/actions, surfaces uncertainty and errors, and cannot replace quantitative logic or execute real trades.
+- **Objective:** Orchestrate approved quantitative research capabilities from structured requests while keeping calculations in existing domain services.
+- **Modules affected:** `agents/research/` (agent, structured state, static policy, deterministic planner/report renderer), approved `application/tools/` and `application/services/`, import characterization, architecture and user documentation.
+- **Dependencies:** Existing multi-asset strategy-research service and typed comparison/reporting tools. `pyproject.toml` already contains all needed runtime dependencies; LangGraph is unnecessary for this fixed, deterministic workflow and no dependency was added.
+- **Tests required:** `tests/test_research_agent.py` checks deterministic tool selection, fake-provider execution, multi-strategy comparison, missing metric evidence warnings, policy rejection of unapproved tools/strategies, dry-run side-effect absence, traceability, and serializable outputs. Import characterization includes agent modules. Run the complete pytest suite.
+- **Acceptance:** Requests are structured and validated; the fixed allowlist is checked before any side effect; dry-run performs no data access or writes; execution results, comparisons, reports, warnings, and errors are traceable and based on actual domain outputs. No arbitrary code, strategy modification, credentials, LLM, real trading, or claims of future returns. Status remains **PARTIAL** until the full suite passes.

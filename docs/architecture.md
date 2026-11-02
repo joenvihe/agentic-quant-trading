@@ -71,8 +71,12 @@
 - `evaluation/`: métricas de rendimiento, benchmark Buy and Hold y comparación
   entre resultados simulados; incluye splits temporales, validación walk-forward
   y resumen de robustez.
-- `agents/`: reservado para una fase posterior; no contiene agentes ni lógica
-  de LLM.
+- `agents/research/`: orquestador determinista de requests estructurados sobre
+  un allowlist fijo de servicios/tools; registra llamadas, evidencia,
+  warnings y trace ID. Un planner sin LLM propone únicamente el flujo
+  permitido; la política valida el plan antes de ejecutar. Dry-run muestra el
+  plan sin leer datos ni escribir archivos. No ejecuta código de requests, no
+  modifica estrategias ni utiliza PaperBroker.
 - `app/`: futuros puntos de entrada e integración.
 - `config/`: ajustes tipados y configuración explícita de logging.
 - `tests/`: pruebas automatizadas con pytest.
@@ -97,8 +101,8 @@ validación falla. Las pruebas usan datos sintéticos y no necesitan Internet.
 
 Estos motores no conectan brokers reales ni gestionan dinero real. `PaperBroker`
 es una simulación local en memoria que puede ejecutar órdenes paper únicamente
-con precios explícitos proporcionados por el caller. Tampoco incluyen LLMs,
-LangGraph o agentes autónomos.
+con precios explícitos proporcionados por el caller. El agente de investigación
+es determinista y no utiliza LLM ni LangGraph.
 
 ## Signals + Strategies — Fase 1
 
@@ -117,8 +121,7 @@ Engine. Ambas devuelven `TargetPosition` (peso entre -1 y 1) y razón
 descriptiva. `StrategyRegistry` solo registra instancias explícitas y rechaza
 nombres repetidos.
 
-No hay señales SHORT generadas por esta primera regla, órdenes, brokers ni
-agentes.
+No hay señales SHORT generadas por esta primera regla, órdenes ni brokers.
 
 ## Backtest + Performance Metrics — Fase 2
 
@@ -139,8 +142,8 @@ modelo de ejecución al siguiente bar. Las métricas se encuentran documentadas
 en `docs/performance_metrics.md`; ratios sin denominador válido se representan
 como `None`.
 
-Esto es una simulación de investigación. No hay órdenes reales ni broker;
-agentes quedan para fases posteriores.
+Esto es una simulación de investigación. No hay órdenes reales ni conexión a
+broker.
 
 ## Walk-Forward Validation + Risk — Fase 3
 
@@ -315,3 +318,25 @@ reporte. Los indicadores y clasificaciones se reutilizan; el CLI solo presenta
 el resultado. Los campos sin datos suficientes se reportan como `N/A`, con
 advertencias de historial insuficiente. Score y percentil relativos aparecen
 como `N/A` para un solo ticker porque no existe universo comparativo.
+
+## Quant Research Agent — Fase 10
+
+`agents.research.ResearchAgent` recibe símbolos, estrategias, fechas, costos y
+rutas mediante `ResearchAgentRequest`; no interpreta texto libre como código o
+selección de herramientas. `DeterministicResearchPlanner` propone un flujo
+fijo de investigación y `policy.authorize_plan` comprueba cada llamada contra
+un allowlist de estrategias y herramientas antes de cualquier descarga o
+escritura. Una llamada `strategy_research` reutiliza el servicio existente, que
+compone datos, estrategia, riesgo, equal-weight, backtest, evaluación y reportes.
+Si se solicitan varias estrategias, el agente usa la herramienta tipada de
+comparación; genera un resumen a partir de métricas y evidencia devueltas por
+estos componentes.
+
+Cada ejecución registra un `trace_id`, llamadas, evidencia, warnings y errores;
+`ResearchAgentState.to_dict()` produce datos JSON-safe. El modo `dry_run`
+valida y muestra el plan sin invocar providers ni escribir archivos. No se usa
+LLM o LangGraph: el workflow es determinista y acotado, de modo que un framework
+de grafos no aporta capacidades necesarias. El agente no ejecuta código de
+requests, exige rutas configuradas absolutas sin traversal ni enlaces
+simbólicos, no modifica estrategias, no accede a credenciales, no conecta
+PaperBroker y no afirma rentabilidad futura.

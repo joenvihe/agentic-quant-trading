@@ -38,6 +38,23 @@ Las capabilities existentes también se exponen como adapters tipados en
 comparación, risk, portfolio y reporting. Sus contratos y límites se describen
 en [`docs/application_tools.md`](docs/application_tools.md).
 
+## Quant Research Agent
+
+El agente de investigación (`agents.research`) recibe una solicitud estructurada
+con símbolos, estrategias permitidas, fechas y rutas explícitas. Usa un planner
+determinista y valida cada plan contra un allowlist fijo antes de ejecutar el
+pipeline cuantitativo existente. Con varias estrategias, compara los resultados;
+después genera un resumen y evidencia trazables. El estado incluye las llamadas,
+warnings, errores y un `trace_id`, y se puede convertir a un objeto JSON-safe
+con `state.to_dict()`.
+
+El modo `dry_run=True` valida y muestra el plan, pero no descarga datos ni
+escribe archivos. El agente no acepta prompts como instrucciones ejecutables,
+código, nombres de herramientas arbitrarias ni brokers; no usa LLM, LangGraph,
+credenciales ni operaciones reales. Las conclusiones se limitan a métricas y
+salidas históricas observadas, e indican que no representan rentabilidad futura.
+La Fase 10 se mantiene parcial hasta que la suite completa pueda ejecutarse.
+
 ## Requisitos
 
 - Python 3.11 o posterior
