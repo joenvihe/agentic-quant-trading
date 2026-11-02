@@ -88,6 +88,9 @@ Phase 9 adds offline multi-asset pipeline integration tests with an injected
 market-data provider, including report and experiment outputs, date filtering
 with prior-history feature warm-up, strategy parameter reporting, cost
 configuration, hidden tracebacks, and CLI exit codes.
+Application-tool tests cover fake-provider research, causal backtests,
+timestamp-aligned strategy comparison, risk decisions, explicit optimizer
+failures, serializable responses, trace ID validation, and report path safety.
 
 ## Target architecture
 
@@ -175,11 +178,11 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 
 ### Phase 9 — Application Tools [PARTIAL]
 
-- **Objective:** Provide user-facing tools for running and inspecting the research pipeline without moving quantitative business logic into the CLI.
-- **Modules affected:** `application/services/strategy_research.py`, `scripts/run_strategy_research.py`, preserved `scripts/research_asset.py`, documentation, and tests. The broader `app/` interface remains future work.
-- **Dependencies:** Existing universe, data, feature, momentum, regime, signal, strategy, risk, portfolio, backtest, evaluation, reporting, and experiment contracts.
-- **Tests required:** `tests/test_strategy_research.py` exercises the pipeline with fake market-data providers, strategy parameters, report/experiment outputs, errors, debug behavior, and argument exit codes. Import characterization ensures no import-time external actions. Full pytest suite remains required.
-- **Acceptance:** CLI delegates to the application service, supports one or more symbols, dates, strategy/parameters, capital, costs, and output directory, generates reports and experiment metadata, and hides tracebacks unless `--debug` is set. No broker or LLM is invoked. Multi-asset backtesting uses equal-capital single-asset sleeves and per-asset drawdown limits; full portfolio-level holdings/risk accounting remains a limitation. Status remains **PARTIAL** until the full suite passes.
+- **Objective:** Expose the existing quantitative services through validated, serializable application requests and responses, without duplicating domain logic or allowing tools to invoke arbitrary code.
+- **Modules affected:** `application/tools/` (research, backtest, strategy comparison, risk, portfolio optimization, and reporting adapters), `application/services/`, `scripts/run_strategy_research.py`, preserved `scripts/research_asset.py`, documentation, and tests. The broader `app/` interface remains future work.
+- **Dependencies:** Existing provider, research service, backtest, evaluation, risk, portfolio, and reporting contracts. No LangGraph, LLM, broker connection, or new dependency is required.
+- **Tests required:** `tests/test_application_tools.py` covers each tool, request validation, trace IDs, serializable responses, failures/warnings, safe report paths, and injected fake providers. `tests/test_strategy_research.py` retains multi-asset integration coverage; import characterization checks tools for import-time side effects. Run the full pytest suite.
+- **Acceptance:** All tool requests are typed and validated; responses consistently include success, trace ID, serializable data, warnings, and errors; adapters reuse domain services and propagate explicit failures. Reporting is confined to a configured root and blocks traversal/symlink targets. No arbitrary code execution, real trading, LLM, or implicit import-time external effects. Existing multi-asset CLI remains available. Status remains **PARTIAL** until the full suite passes.
 
 ### Phase 10 — Research Agent [TODO]
 

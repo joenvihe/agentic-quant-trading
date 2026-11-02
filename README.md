@@ -33,6 +33,11 @@ cancelación no aplica a este flujo síncrono.
 El backtest y PaperBroker son simulaciones locales de investigación. No
 gestionan dinero real ni se implementan agentes, LLMs o LangGraph.
 
+Las capabilities existentes también se exponen como adapters tipados en
+[`application/tools/`](application/tools/) para research, backtest,
+comparación, risk, portfolio y reporting. Sus contratos y límites se describen
+en [`docs/application_tools.md`](docs/application_tools.md).
+
 ## Requisitos
 
 - Python 3.11 o posterior
