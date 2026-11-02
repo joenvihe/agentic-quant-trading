@@ -17,8 +17,10 @@
   motor no depende de Yahoo Finance directamente.
 - `scripts/`: comandos de usuario. `python -m scripts.download_market_data
   TICKER` orquesta el proveedor, la validación y la persistencia.
-- `features/`: futuras transformaciones de datos y variables derivadas.
-- `factors/`: futuros factores cuantitativos.
+- `features/`: Quant Feature Engine calcula indicadores exclusivamente sobre
+  el contrato OHLCV normalizado de `data/`.
+- `factors/`: Momentum Engine rankea activos usando retornos y percentiles;
+  no produce señales ni operaciones.
 - `regime/`: futuros análisis de regímenes de mercado.
 - `strategies/`: futuras hipótesis y señales de investigación; no contiene
   estrategias todavía.
@@ -49,6 +51,17 @@ Yahoo Finance es una fuente de terceros sin garantía de disponibilidad; el
 comando no sustituye datos corregidos ni informa éxito si la descarga o
 validación falla. Las pruebas usan datos sintéticos y no necesitan Internet.
 
-Este milestone no calcula indicadores o momentum, no identifica regímenes, no
-predice precios, conecta brokers, envía órdenes, gestiona dinero real ni incluye
-LLMs, LangGraph o agentes autónomos.
+Estos motores no identifican regímenes, predicen precios, conectan brokers,
+envían órdenes, gestionan dinero real ni incluyen LLMs, LangGraph o agentes
+autónomos.
+
+## Momentum Engine v0.1
+
+`python -m scripts.rank_momentum SPY QQQ IWM DIA` recupera datos a través de
+Market Data Engine, calcula features y rankea momentum de 1/3/6/12 meses. El
+momentum absoluto significa retorno 12M mayor que cero; el relativo es el
+percentil de cada horizonte dentro del universo. El score compuesto es el
+promedio ponderado de esos percentiles y el percentil final compara scores.
+Los pesos iguales por defecto se configuran con `AQT_MOMENTUM_WEIGHT_*`.
+El resultado es un factor de ranking, no una señal, un trade ni una
+recomendación de compra/venta.

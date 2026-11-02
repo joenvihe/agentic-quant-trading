@@ -3,16 +3,15 @@
 Proyecto educativo para construir progresivamente un sistema de investigación
 de swing trading basado en Python, herramientas cuantitativas e IA agéntica.
 
-## Alcance actual: Market Data Engine v0.1
+## Alcance actual: Market Data, Feature y Momentum Engines v0.1
 
-El primer vertical slice descarga OHLCV diario desde Yahoo Finance, normaliza y
-valida las barras, las guarda localmente como CSV, las vuelve a leer y muestra
-un resumen. El adaptador de Yahoo está aislado detrás de la interfaz
-`MarketDataProvider`, por lo que las pruebas usan un proveedor sintético sin
-acceso a Internet.
+Market Data Engine descarga OHLCV diario de Yahoo Finance, normaliza y valida
+las barras y las guarda localmente como CSV. Quant Feature Engine calcula
+indicadores deterministas desde ese modelo normalizado. Momentum Engine usa
+esas features para rankear un universo; no genera señales ni operaciones.
 
-Todavía no implementa indicadores, momentum, estrategias, backtesting,
-ejecución de operaciones, broker, agentes, LLMs ni LangGraph.
+No se implementan estrategias, backtesting, ejecución de operaciones, broker,
+agentes, LLMs ni LangGraph.
 
 ## Requisitos
 
@@ -50,6 +49,20 @@ python -m pytest
 ```
 
 Las pruebas usan datos sintéticos deterministas y no contactan Yahoo Finance.
+
+## Rankear momentum
+
+```powershell
+python -m scripts.rank_momentum SPY QQQ IWM DIA
+```
+
+El comando recupera datos reales mediante Market Data Engine y muestra los
+retornos de 1M/3M/6M/12M y un score compuesto de percentiles relativos. El
+momentum absoluto se define como retorno 12M positivo. Los pesos del score son
+iguales por defecto y configurables con `AQT_MOMENTUM_WEIGHT_1M`,
+`AQT_MOMENTUM_WEIGHT_3M`, `AQT_MOMENTUM_WEIGHT_6M` y
+`AQT_MOMENTUM_WEIGHT_12M`. El ranking es un factor cuantitativo, no una
+recomendación financiera.
 
 ## Configuración
 
