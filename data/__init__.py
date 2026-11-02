@@ -24,4 +24,3 @@ __all__ = [
     "normalize_ticker",
     "run_market_data_engine",
 ]
-"""Carga y gestión de datos."""
