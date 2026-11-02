@@ -1,0 +1,128 @@
+# Master Plan
+
+## Current repository assessment
+
+Status labels describe implemented behavior, not directory names:
+
+- **[EXISTS] Market Data Engine:** `data/market_data.py`, `data/engine.py`, `data/storage.py`, and `data/providers/yahoo_finance.py` define normalized OHLCV records, provider and data contracts, validation, CSV persistence, and the Yahoo Finance adapter. The provider is an external runtime dependency; quantitative modules consume the normalized model rather than fetching data.
+- **[EXISTS] Data validation:** validation is part of `normalize_market_data` and the Market Data Engine; there is no separate validation package. It checks ticker and row shape, timestamps/order/duplicates, finite and positive prices, OHLC consistency, and volume.
+- **[EXISTS] Quant Feature Engine:** `features/engine.py` calculates trend, momentum, volatility, volume, and market-structure features from normalized market data. Insufficient lookback windows produce missing values rather than fabricated values.
+- **[EXISTS] Momentum factor:** `factors/momentum.py` computes horizon returns, absolute momentum, cross-sectional relative ranks, and configurable composite scores. A single-asset research report cannot compute cross-sectional scores and reports them as unavailable.
+- **[EXISTS] Deterministic Market Regime baseline:** `regime/engine.py` classifies regimes using explicit configurable thresholds, metrics, evidence, and reason codes. This is a baseline, not an HMM or a trading recommendation.
+- **[EXISTS] Configuration primitives:** `config/settings.py`, `config/momentum.py`, and `config/regime.py` provide application settings and environment-configurable factor/regime parameters.
+- **[PARTIAL] Logging:** `config/logging_config.py` provides explicit logging configuration; logging policy and consistent use across all application boundaries remain to be established.
+- **[PARTIAL] Application and reporting:** `application/services/research.py` orchestrates the current single-asset research flow and `scripts/research_asset.py` renders a console report. It does not implement signals, strategies, backtests, portfolio construction, or a full reporting/experiment system.
+- **[TODO] Signals, strategies, risk, portfolio, backtest, and evaluation:** their directories (`factors/` contains the existing momentum factor; the separate `strategies/`, `risk/`, `portfolio/`, `backtest/`, and `evaluation/` packages contain only package markers).
+- **[TODO] Agent and application tools:** `agents/` and `app/` contain package markers only; there is no agent runtime or application-tool layer.
+- **[TODO] HMM regime, fundamental analysis, universe selection, sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
+- **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
+
+### Existing contracts and conventions
+
+- The core data contract is `MarketBar`, `MarketData`, and `MarketDataProvider` in `data/market_data.py`. The engine normalizes tickers, orders bars chronologically, validates the normalized data, persists it, and reloads it.
+- Data exceptions are `MarketDataError`, `MarketDataDownloadError`, and `MarketDataValidationError`. Quantitative modules expose their own domain errors, including feature, momentum, and regime errors; application services translate expected failures for their CLI boundary.
+- The flow currently implemented is: ticker → Market Data Engine → normalized `MarketData` → Feature Engine → Momentum factor and Regime Engine → research service → console report.
+- Python 3.11 or newer is required. Runtime dependency: `yfinance`; development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
+- Code uses type hints, dataclasses (including immutable result/configuration objects), explicit domain errors, snake_case names, and pytest. Existing tests use synthetic rows and fake providers; preserve their offline behavior.
+- Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, and `tests/test_smoke.py`.
+- The package markers in `strategies/`, `backtest/`, `evaluation/`, `risk/`, `portfolio/`, `agents/`, and `app/` do not indicate implemented capabilities.
+
+## Target architecture
+
+Keep responsibilities separated and data flow explicit:
+
+Data
+→ Features
+→ Factors
+→ Signals
+→ Strategies
+→ Risk
+→ Portfolio
+→ Backtest
+→ Evaluation
+→ Reporting
+→ Execution
+
+Agents orchestrate these capabilities; they do not replace quantitative logic. Implement roadmap phases incrementally, preserve the current working path, avoid look-ahead/data leakage, and keep tests deterministic and offline.
+
+## Roadmap
+
+### Phase 1 — Signals + Strategies [TODO]
+
+- **Objective:** Define explicit signal contracts and implement initial strategies that consume existing factors/features without conflating factors, signals, and trades.
+- **Modules affected:** New signal modules (to be placed consistently with the existing package layout), `strategies/`, configuration, and application orchestration only where required.
+- **Dependencies:** Existing normalized data, features, factors, and regime baseline. Specify signal timestamps, validity, and intended holding/decision semantics before implementation.
+- **Tests required:** Unit tests for signal states and strategy rules; boundary and missing-data tests; timestamp/availability tests proving no look-ahead; deterministic synthetic fixtures.
+- **Acceptance:** A strategy can transform point-in-time inputs into typed, explainable signals/actions, with no broker calls and no quantitative duplication in CLI code.
+
+### Phase 2 — Backtest + Performance Metrics [TODO]
+
+- **Objective:** Evaluate strategy behavior with a reproducible historical simulation and clearly defined performance metrics.
+- **Modules affected:** `backtest/`, `evaluation/`, strategy interfaces, configuration, and tests.
+- **Dependencies:** Phase 1 signal and strategy contracts; existing historical Market Data contract.
+- **Tests required:** Hand-calculated small fixtures; trade/position lifecycle and portfolio accounting cases; fees/slippage assumptions; empty and insufficient histories; temporal tests for causality and no look-ahead.
+- **Acceptance:** Identical inputs/configuration produce identical results; metric definitions and costs are documented; the simulator cannot use information before it is available.
+
+### Phase 3 — Walk-Forward Validation + Risk [TODO]
+
+- **Objective:** Add out-of-sample, time-ordered validation and explicit risk constraints.
+- **Modules affected:** `evaluation/`, `risk/`, `backtest/`, strategy configuration, and tests.
+- **Dependencies:** Phases 1–2 and agreed risk/validation contracts.
+- **Tests required:** Split-boundary and embargo tests where applicable; leakage checks; risk-limit boundary tests; deterministic synthetic scenarios including missing and extreme observations.
+- **Acceptance:** Validation preserves chronological order and isolates out-of-sample data; risk decisions are explicit, testable, and enforced before portfolio/backtest actions.
+
+### Phase 4 — Portfolio Optimization [TODO]
+
+- **Objective:** Construct portfolio weights subject to documented constraints and input assumptions.
+- **Modules affected:** `portfolio/`, `risk/`, `evaluation/`, configuration, and tests.
+- **Dependencies:** Phase 3 risk constraints and approved return/risk input contracts.
+- **Tests required:** Constraint and boundary tests, infeasible-input behavior, numerical stability, deterministic fixtures, and checks for use of only point-in-time data.
+- **Acceptance:** Weights meet configured constraints or return an explicit infeasibility error; assumptions and optimization objective are documented and reproducible.
+
+### Phase 5 — HMM Regime + Fundamental + Universe Selection [TODO]
+
+- **Objective:** Add separately validated regime modeling, point-in-time fundamental data, and a reproducible asset-universe selection process.
+- **Modules affected:** `regime/`, new fundamental/universe modules, `data/` provider contracts if needed, configuration, and tests.
+- **Dependencies:** Existing normalized data/features; point-in-time data availability and licensing/provenance requirements; model and universe-selection specifications.
+- **Tests required:** Synthetic regime sequences and state mapping tests; provider fakes; stale/missing fundamental data tests; survivorship/look-ahead checks; deterministic behavior for fixed model configuration.
+- **Acceptance:** The current deterministic baseline remains available; new model/fundamental/universe outputs are explicitly versioned, interpretable where possible, and cannot silently replace existing behavior.
+
+### Phase 6 — Reporting + Experiment Tracking [TODO]
+
+- **Objective:** Produce reusable structured research outputs and record the inputs/configuration/code version needed to reproduce an experiment.
+- **Modules affected:** `application/`, reporting modules, `evaluation/`, configuration, and tests.
+- **Dependencies:** Stable outputs from the implemented quantitative phases.
+- **Tests required:** Schema/serialization tests, unavailable-value handling, reproducibility metadata checks, and offline storage tests.
+- **Acceptance:** A report links results to their data range, configuration, and code identity; serialization is stable and does not invent missing values.
+
+### Phase 7 — Sentiment + Supervised ML [TODO]
+
+- **Objective:** Add optional sentiment and supervised models only after defining point-in-time inputs, labels, and evaluation methodology.
+- **Modules affected:** New sentiment/model modules, `data/` provider contracts as necessary, `features/` or `factors/` only for well-defined outputs, and `evaluation/`.
+- **Dependencies:** Phases 2, 3, and 6; approved data provenance, label construction, leakage controls, and dependency review.
+- **Tests required:** Offline provider fakes; label alignment and leakage tests; deterministic preprocessing/model tests where supported; baseline comparison and unavailable-data tests.
+- **Acceptance:** Model outputs are clearly distinguished from factors and signals; evaluation is out of sample and reproducible; optional dependencies and data assumptions are documented.
+
+### Phase 8 — Paper Trading [TODO]
+
+- **Objective:** Validate strategy-to-order lifecycle in a paper/sandbox environment without real trading.
+- **Modules affected:** New paper execution adapter, `application/`, `risk/`, configuration, and integration tests.
+- **Dependencies:** Phases 1–3, explicit order/risk contracts, and a sandbox-only provider with a clear operational safety boundary.
+- **Tests required:** Fake broker/sandbox tests, order-state transition tests, idempotency and failure/retry cases, risk-limit enforcement, and proof that test runs cannot reach a live endpoint.
+- **Acceptance:** Only sandbox/paper operations are possible by default; order lifecycle and failures are observable; no real credentials or live trading path are added.
+
+### Phase 9 — Application Tools [TODO]
+
+- **Objective:** Provide stable user-facing tools for invoking and inspecting research workflows without moving business logic into the interface.
+- **Modules affected:** `app/`, `application/`, `scripts/`, configuration, and documentation.
+- **Dependencies:** Stable service contracts and report formats from prior phases.
+- **Tests required:** CLI/API contract tests with injected services; input/error handling tests; offline integration tests; import-side-effect tests.
+- **Acceptance:** Tools delegate to application services, provide clear errors and structured output, and perform no downloads or external actions merely by being imported.
+
+### Phase 10 — Research Agent [TODO]
+
+- **Objective:** Add an agent that plans and orchestrates approved research capabilities while leaving quantitative calculations to deterministic modules.
+- **Modules affected:** `agents/`, `application/`, approved tools, configuration, and tests.
+- **Dependencies:** Stable service/tool contracts, reporting and experiment metadata, and explicit permissions/safety boundaries.
+- **Tests required:** Tool-contract and orchestration tests with fakes; permission-boundary tests; deterministic workflow tests where applicable; tests proving the agent cannot bypass risk controls or invoke real trading.
+- **Acceptance:** The agent only composes authorized capabilities, records its inputs/actions, surfaces uncertainty and errors, and cannot replace quantitative logic or execute real trades.
