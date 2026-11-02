@@ -11,13 +11,14 @@ Status labels describe implemented behavior, not directory names:
 - **[EXISTS] Deterministic Market Regime baseline:** `regime/engine.py` classifies regimes using explicit configurable thresholds, metrics, evidence, and reason codes. This is a baseline, not an HMM or a trading recommendation.
 - **[EXISTS] Configuration primitives:** `config/settings.py`, `config/momentum.py`, and `config/regime.py` provide application settings and environment-configurable factor/regime parameters.
 - **[PARTIAL] Logging:** `config/logging_config.py` provides explicit logging configuration; logging policy and consistent use across all application boundaries remain to be established.
-- **[PARTIAL] Application and reporting:** `application/services/research.py` orchestrates the current single-asset research flow and `scripts/research_asset.py` renders a console report. The reusable JSON/CSV/HTML report and experiment registry contracts are implemented separately in Phase 6 and are not yet integrated into that CLI flow.
+- **[PARTIAL] Application and reporting:** `application/services/research.py` and `scripts/research_asset.py` preserve the single-asset research flow. `application/services/strategy_research.py` and `scripts/run_strategy_research.py` compose the existing multi-asset modules through evaluation, reports, and experiment tracking using injected providers. The backtest aggregates equal-capital single-asset sleeves on common timestamps; portfolio-level drawdown/risk accounting remains limited.
 - **[PARTIAL] Signals + strategies:** `signals/` provides validated signal values and a long-only moving-average signal using existing SMA features. `strategies/` maps signals and existing momentum/regime outputs into target positions and has an explicit registry. Phase 1 acceptance awaits a successful full-suite run.
 - **[PARTIAL] Backtest + evaluation:** a deterministic daily, single-asset, long-only engine with next-bar execution and transaction costs is implemented, along with performance metrics and a causal Buy and Hold benchmark. Phase 2 acceptance awaits a successful full-suite run.
 - **[PARTIAL] Walk-forward validation:** `evaluation/` provides expanding/rolling temporal splits, train-only parameter selection, test-only evaluation, and OOS robustness summaries. Full-suite validation remains pending.
 - **[PARTIAL] Risk Engine:** `risk/` provides explicit exposure limits, optional volatility targeting, and drawdown circuit-breaker decisions without executing trades or selecting strategies. Full-suite validation remains pending.
 - **[PARTIAL] Portfolio:** `portfolio/` implements equal-weight allocation, sample covariance from aligned return series, and long-only maximum-Sharpe optimization with explicit bounds. Full-suite validation remains pending.
-- **[TODO] Agent and application tools:** `agents/` and `app/` contain package markers only; there is no agent runtime or application-tool layer.
+- **[PARTIAL] Application tools:** `scripts/run_strategy_research.py` provides an injectable CLI and service for the existing quantitative pipeline without an LLM. General application APIs and `app/` tools remain unimplemented.
+- **[TODO] Agent:** `agents/` contains only a package marker; there is no agent runtime.
 - **[PARTIAL] HMM regime:** `regime/hmm.py` adds seeded Gaussian HMM states and statistical labels alongside the deterministic baseline; regime comparison is implemented. Full-suite validation remains pending.
 - **[PARTIAL] Fundamental Engine:** provider/snapshot contracts, ROC, Earnings Yield, P/E, and a combined ranking are implemented. No external fundamental provider is included; full-suite validation remains pending.
 - **[PARTIAL] Universe Selection:** static symbol provider, normalization/deduplication, injected data provider, and configurable screening filters are implemented. Full-suite validation remains pending.
@@ -37,7 +38,7 @@ Status labels describe implemented behavior, not directory names:
 
 - The core data contract is `MarketBar`, `MarketData`, and `MarketDataProvider` in `data/market_data.py`. The engine normalizes tickers, orders bars chronologically, validates the normalized data, persists it, and reloads it.
 - Data exceptions are `MarketDataError`, `MarketDataDownloadError`, and `MarketDataValidationError`. Quantitative modules expose their own domain errors, including feature, momentum, and regime errors; application services translate expected failures for their CLI boundary.
-- The flow currently implemented is: ticker → Market Data Engine → normalized `MarketData` → Feature Engine → Momentum factor and Regime Engine → research service → console report.
+- `scripts/research_asset.py` remains the single-ticker report path. The multi-asset service adds: explicit universe → Market Data Engine/validation → features → momentum factor/ranking → regime → strategy signal/position → risk → equal-weight allocation → per-asset backtests aggregated on common timestamps → performance and benchmark comparison → JSON/CSV/HTML report → experiment registry. Existing modules perform calculations; this flow has no LLM, paper broker, or real order execution.
 - Python 3.11 or newer is required. Runtime dependencies: `yfinance`, SciPy
   (portfolio optimization), `hmmlearn` (HMM regime analysis), VADER and
   XGBoost (Phase 7); development dependency: `pytest`. Packaging uses
@@ -83,6 +84,10 @@ baseline/XGBoost reproducibility, and classification metric coverage.
 Phase 8 adds offline paper-broker tests for buys/sells, insufficient funds,
 overselling, commission/slippage, account marking, invalid prices, duplicate
 order IDs and deterministic results.
+Phase 9 adds offline multi-asset pipeline integration tests with an injected
+market-data provider, including report and experiment outputs, date filtering
+with prior-history feature warm-up, strategy parameter reporting, cost
+configuration, hidden tracebacks, and CLI exit codes.
 
 ## Target architecture
 
@@ -168,13 +173,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_execution.py` covers buys/sells, order lifecycle, insufficient funds, overselling, commission/slippage, account equity/mark-to-market, invalid input, duplicate IDs, and determinism. Import characterization ensures no network activity.
 - **Acceptance:** Orders are only filled/rejected by an in-memory `PaperBroker`; position exposure is long-only; funds and prices are validated; all price data is explicit and local. No credentials, real broker, network calls, strategy decisions or live operations are included. Status remains **PARTIAL** until the full suite passes.
 
-### Phase 9 — Application Tools [TODO]
+### Phase 9 — Application Tools [PARTIAL]
 
-- **Objective:** Provide stable user-facing tools for invoking and inspecting research workflows without moving business logic into the interface.
-- **Modules affected:** `app/`, `application/`, `scripts/`, configuration, and documentation.
-- **Dependencies:** Stable service contracts and report formats from prior phases.
-- **Tests required:** CLI/API contract tests with injected services; input/error handling tests; offline integration tests; import-side-effect tests.
-- **Acceptance:** Tools delegate to application services, provide clear errors and structured output, and perform no downloads or external actions merely by being imported.
+- **Objective:** Provide user-facing tools for running and inspecting the research pipeline without moving quantitative business logic into the CLI.
+- **Modules affected:** `application/services/strategy_research.py`, `scripts/run_strategy_research.py`, preserved `scripts/research_asset.py`, documentation, and tests. The broader `app/` interface remains future work.
+- **Dependencies:** Existing universe, data, feature, momentum, regime, signal, strategy, risk, portfolio, backtest, evaluation, reporting, and experiment contracts.
+- **Tests required:** `tests/test_strategy_research.py` exercises the pipeline with fake market-data providers, strategy parameters, report/experiment outputs, errors, debug behavior, and argument exit codes. Import characterization ensures no import-time external actions. Full pytest suite remains required.
+- **Acceptance:** CLI delegates to the application service, supports one or more symbols, dates, strategy/parameters, capital, costs, and output directory, generates reports and experiment metadata, and hides tracebacks unless `--debug` is set. No broker or LLM is invoked. Multi-asset backtesting uses equal-capital single-asset sleeves and per-asset drawdown limits; full portfolio-level holdings/risk accounting remains a limitation. Status remains **PARTIAL** until the full suite passes.
 
 ### Phase 10 — Research Agent [TODO]
 

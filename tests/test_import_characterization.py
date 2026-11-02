@@ -113,11 +113,13 @@ modules = (
     "models.types",
     "models.xgboost_model",
     "application.services.research",
+    "application.services.strategy_research",
     "scripts.analyze_features",
     "scripts.detect_regime",
     "scripts.download_market_data",
     "scripts.rank_momentum",
     "scripts.research_asset",
+    "scripts.run_strategy_research",
 )
 for module in modules:
     importlib.import_module(module)

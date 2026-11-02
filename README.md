@@ -62,6 +62,41 @@ disponibilidad ni estabilidad de API. La descarga necesita conexión a Internet;
 el comando termina con error si el proveedor no entrega datos válidos. El
 historial es diario y usa el máximo período que Yahoo tenga disponible.
 
+## Pipeline de estrategia multi-activo
+
+```powershell
+python -m scripts.run_strategy_research SPY QQQ `
+  --start-date 2023-01-01 `
+  --end-date 2025-12-31 `
+  --strategy moving_average `
+  --strategy-param fast_window=20 `
+  --strategy-param slow_window=50 `
+  --initial-cash 100000 `
+  --commission-bps 1 `
+  --slippage-bps 2 `
+  --output-dir reports/generated
+```
+
+El comando compone el universo explícito, Market Data Engine y su validación,
+features, momentum cross-sectional, régimen, señal/estrategia, Risk Engine,
+asignación equal-weight, backtests por activo, evaluación, benchmark, reportes
+JSON/CSV/HTML y registro del experimento. Las estrategias son
+`moving_average` y `momentum_regime`; sus parámetros se pasan con
+`--strategy-param KEY=VALUE`. Añade `--debug` para obtener un traceback. El
+código de salida es `0` si completa, `1` ante fallos de datos/ejecución y `2`
+para argumentos inválidos.
+
+El provider de mercado de producción usa Yahoo Finance; las pruebas inyectan
+providers falsos y no acceden a Internet. Reportes y experimentos se escriben
+en el directorio indicado. Multi-activo reutiliza el backtest existente de un
+activo mediante sleeves de igual capital alineados a timestamps comunes; esto
+se indica en el reporte. El límite de drawdown se evalúa por activo usando la
+feature rolling 52W, no sobre una curva consolidada de cartera. Esta ruta es
+investigación: no importa `PaperBroker`, no crea órdenes, no usa LLM y no
+conecta brokers.
+Los indicadores utilizan el historial anterior disponible para calentamiento,
+pero el backtest y sus reportes quedan limitados al intervalo solicitado.
+
 ## Pruebas
 
 ```powershell
