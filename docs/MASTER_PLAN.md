@@ -13,7 +13,8 @@ Status labels describe implemented behavior, not directory names:
 - **[PARTIAL] Logging:** `config/logging_config.py` provides explicit logging configuration; logging policy and consistent use across all application boundaries remain to be established.
 - **[PARTIAL] Application and reporting:** `application/services/research.py` orchestrates the current single-asset research flow and `scripts/research_asset.py` renders a console report. It does not implement signals, strategies, backtests, portfolio construction, or a full reporting/experiment system.
 - **[PARTIAL] Signals + strategies:** `signals/` provides validated signal values and a long-only moving-average signal using existing SMA features. `strategies/` maps signals and existing momentum/regime outputs into target positions and has an explicit registry. Phase 1 acceptance awaits a successful full-suite run.
-- **[TODO] Risk, portfolio, backtest, and evaluation:** the separate `risk/`, `portfolio/`, `backtest/`, and `evaluation/` packages contain only package markers.
+- **[PARTIAL] Backtest + evaluation:** a deterministic daily, single-asset, long-only engine with next-bar execution and transaction costs is implemented, along with performance metrics and a causal Buy and Hold benchmark. Phase 2 acceptance awaits a successful full-suite run.
+- **[TODO] Risk and portfolio:** the separate `risk/` and `portfolio/` packages contain only package markers.
 - **[TODO] Agent and application tools:** `agents/` and `app/` contain package markers only; there is no agent runtime or application-tool layer.
 - **[TODO] HMM regime, fundamental analysis, universe selection, sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
@@ -25,8 +26,8 @@ Status labels describe implemented behavior, not directory names:
 - The flow currently implemented is: ticker → Market Data Engine → normalized `MarketData` → Feature Engine → Momentum factor and Regime Engine → research service → console report.
 - Python 3.11 or newer is required. Runtime dependency: `yfinance`; development dependency: `pytest`. Packaging uses setuptools and the CI workflow runs pytest.
 - Code uses type hints, dataclasses (including immutable result/configuration objects), explicit domain errors, snake_case names, and pytest. Existing tests use synthetic rows and fake providers; preserve their offline behavior.
-- Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, and `tests/test_smoke.py`.
-- The package markers in `strategies/`, `backtest/`, `evaluation/`, `risk/`, `portfolio/`, `agents/`, and `app/` do not indicate implemented capabilities.
+- Relevant tests include `tests/test_market_data.py`, `tests/test_features.py`, `tests/test_momentum.py`, `tests/test_regime.py`, `tests/test_research_asset.py`, `tests/test_signals.py`, `tests/test_strategies.py`, `tests/test_backtest.py`, and `tests/test_smoke.py`.
+- The package markers in `risk/`, `portfolio/`, `agents/`, and `app/` do not indicate implemented capabilities.
 
 ### Current regression coverage
 
@@ -46,6 +47,9 @@ fake providers, or a guarded subprocess; they do not depend on live market data.
 Phase 1 adds offline tests for signal states/validation, insufficient SMA
 history, strategy position mapping, allowed-regime gating, explicit registry
 behavior, and deterministic strategy outputs.
+Phase 2 adds synthetic tests for flat and buy/hold curves, delayed execution,
+entry/exit accounting, transaction costs, input validation, defined metric
+values, benchmark comparison, and deterministic results.
 
 ## Target architecture
 
@@ -75,13 +79,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_signals.py` and `tests/test_strategies.py` cover LONG/FLAT, insufficient history, invalid windows, strength boundaries, position mapping, registry and duplicate names, regime gating, input validation, and determinism. The complete pytest suite must pass.
 - **Acceptance:** Implemented contracts and strategies return typed, timezone-aware signals/target positions; no broker calls, orders, PnL, backtesting, or quantitative duplication in CLI code. Mark **COMPLETE only after the full test suite passes**. Current status remains **PARTIAL** while execution is blocked by the local Windows application-control policy.
 
-### Phase 2 — Backtest + Performance Metrics [TODO]
+### Phase 2 — Backtest + Performance Metrics [PARTIAL]
 
 - **Objective:** Evaluate strategy behavior with a reproducible historical simulation and clearly defined performance metrics.
-- **Modules affected:** `backtest/`, `evaluation/`, strategy interfaces, configuration, and tests.
-- **Dependencies:** Phase 1 signal and strategy contracts; existing historical Market Data contract.
-- **Tests required:** Hand-calculated small fixtures; trade/position lifecycle and portfolio accounting cases; fees/slippage assumptions; empty and insufficient histories; temporal tests for causality and no look-ahead.
-- **Acceptance:** Identical inputs/configuration produce identical results; metric definitions and costs are documented; the simulator cannot use information before it is available.
+- **Modules affected:** `backtest/`, `evaluation/`, docs, and tests. Phase 1 strategy contract is consumed without modification.
+- **Dependencies:** Existing `MarketData` and `TargetPosition` contracts. Daily bars, one asset, long-only target weights [0, 1], no margin or short sales.
+- **Tests required:** `tests/test_backtest.py` uses synthetic fixtures for flat and buy/hold results, delayed next-bar execution, entry/exit, costs, invalid prices/capital/positions, flat/known drawdown metrics, undefined no-trade metrics, benchmark and determinism. The complete pytest suite must pass.
+- **Acceptance:** Closing-bar decisions execute no earlier than the next bar's open; purchases cannot create margin; costs and metric conventions are documented; identical inputs produce identical results. Current status remains **PARTIAL** while full-suite execution is blocked by the local Windows application-control policy. Mark **COMPLETE only after the full suite passes**.
 
 ### Phase 3 — Walk-Forward Validation + Risk [TODO]
 

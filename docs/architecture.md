@@ -33,9 +33,12 @@
   `MovingAverageStrategy`, la estrategia long-only `MomentumRegimeStrategy` y
   un `StrategyRegistry` de registro explícito.
 - `risk/`: futuras métricas y reglas de análisis del riesgo.
-- `backtest/`: futura simulación histórica determinista.
+- `backtest/`: simulación diaria, long-only y de un activo. Recibe posiciones
+  objetivo y ejecuta la información de cierre en la apertura del bar siguiente,
+  contabilizando comisión y slippage; no realiza trading real.
 - `portfolio/`: futura agregación y análisis de carteras.
-- `evaluation/`: futuras métricas y herramientas de evaluación.
+- `evaluation/`: métricas de rendimiento, benchmark Buy and Hold y comparación
+  entre resultados simulados.
 - `agents/`: reservado para una fase posterior; no contiene agentes ni lógica
   de LLM.
 - `app/`: futuros puntos de entrada e integración.
@@ -81,8 +84,30 @@ Engine. Ambas devuelven `TargetPosition` (peso entre -1 y 1) y razón
 descriptiva. `StrategyRegistry` solo registra instancias explícitas y rechaza
 nombres repetidos.
 
-No hay señales SHORT generadas por esta primera regla, backtesting, PnL,
-órdenes, brokers ni agentes.
+No hay señales SHORT generadas por esta primera regla, órdenes, brokers ni
+agentes.
+
+## Backtest + Performance Metrics — Fase 2
+
+`backtest.run_backtest` recibe barras OHLCV ya normalizadas y `TargetPosition`
+con timestamps alineados a esas barras. La posición calculada con información
+del cierre `t` solo se ejecuta a la apertura de `t+1`. El tamaño se calcula
+con equity y cierre conocidos en `t`; el precio de ejecución incorpora slippage
+adverso y la comisión se descuenta del efectivo. Las barras no se liquidan
+forzosamente al final. No se permite cash negativo por compras, exposición
+fuera de [0, 1], margen ni posiciones cortas. La última posición indicada no
+tiene efecto si no hay bar posterior.
+
+La primera versión opera un solo activo en barras diarias y no deriva
+posiciones por sí misma: el caller entrega posiciones objetivo que una
+estrategia produjo usando información disponible en sus timestamps.
+`evaluation.buy_and_hold_benchmark` y el motor de estrategia comparten el
+modelo de ejecución al siguiente bar. Las métricas se encuentran documentadas
+en `docs/performance_metrics.md`; ratios sin denominador válido se representan
+como `None`.
+
+Esto es una simulación de investigación. No hay órdenes reales, broker,
+walk-forward, gestión de riesgo, optimización de portfolio, ML ni agentes.
 
 ## Momentum Engine v0.1
 

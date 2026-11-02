@@ -3,7 +3,7 @@
 Proyecto educativo para construir progresivamente un sistema de investigación
 de swing trading basado en Python, herramientas cuantitativas e IA agéntica.
 
-## Alcance actual: Data, Features, Factors, Signals y Strategies
+## Alcance actual: Data, Features, Factors, Signals, Strategies y Backtest
 
 Market Data Engine descarga OHLCV diario de Yahoo Finance, normaliza y valida
 las barras y las guarda localmente como CSV. Quant Feature Engine calcula
@@ -13,11 +13,12 @@ Market Regime Engine clasifica por reglas deterministas dirección, fuerza,
 volatilidad y confirmación; tampoco genera recomendaciones de mercado.
 Signals transforma features disponibles en valores de señal explícitos.
 Strategies evalúa señales o factores junto con el régimen y devuelve una
-posición objetivo de investigación; un factor no se convierte directamente en
-señal y una posición objetivo no es una orden.
+posición objetivo de investigación; un factor no se convierte directamente en señal y
+una posición objetivo no es una orden. Backtest y Evaluation simulan posiciones
+históricas con ejecución causal y calculan métricas, sin conectar brokers.
 
-No se implementan backtesting, ejecución de operaciones, broker, agentes, LLMs
-ni LangGraph.
+El backtest es una simulación histórica determinista, no ejecución de
+operaciones. No se conectan brokers ni se implementan agentes, LLMs o LangGraph.
 
 ## Requisitos
 
@@ -131,6 +132,26 @@ duplicados.
 Las señales y posiciones objetivo son resultados cuantitativos de
 investigación, no instrucciones de ejecución. No hay órdenes ni conexión a
 broker.
+
+## Backtest y evaluación
+
+`backtest.run_backtest` recibe `MarketData` y posiciones objetivo con timestamp
+de señal. Una posición calculada al cierre de `t` se ejecuta en la apertura del
+siguiente bar; la última señal no se ejecuta al no existir un bar posterior.
+La primera versión admite un activo, frecuencia diaria, posiciones long-only de
+0 a 1, sin margen ni ventas cortas. Configura capital y costes con
+`BacktestConfig(initial_cash=100_000, commission_bps=0, slippage_bps=0)`.
+
+`evaluation.calculate_metrics` calcula Total Return, CAGR, volatilidad
+anualizada, Sharpe, Sortino, Maximum Drawdown, Calmar, Win Rate, Profit Factor
+y número de ejecuciones. `periods_per_year` (252 por defecto) y la tasa libre
+de riesgo anual (`risk_free_rate`, 0 por defecto) son configurables. Las
+métricas indefinidas, como Sharpe en una curva plana o Profit Factor sin
+pérdidas cerradas, son `None`, no infinito. El benchmark Buy and Hold usa el
+mismo modelo causal de entrada al siguiente bar.
+
+Consulta [`docs/performance_metrics.md`](docs/performance_metrics.md) para las
+definiciones, convenciones de costes y limitaciones.
 
 ## Configuración
 
