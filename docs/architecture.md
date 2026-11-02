@@ -47,6 +47,11 @@
 - `universe/`: providers de universos explícitos, normalización/deduplicación
   de símbolos y filtros deterministas de datos, precio, historial y
   capitalización disponible.
+- `reporting/`: proyecciones tabulares y generación explícita de informes JSON,
+  CSV y HTML escapado desde resultados y métricas ya calculados; charts SVG
+  locales, sin navegador ni efectos durante imports.
+- `experiments/`: huellas SHA-256 canónicas y registro JSON de experimentos con
+  redacción de claves sensibles y publicación atómica que no sobrescribe runs.
 - `evaluation/`: métricas de rendimiento, benchmark Buy and Hold y comparación
   entre resultados simulados; incluye splits temporales, validación walk-forward
   y resumen de robustez.
@@ -210,6 +215,25 @@ actual no debe reutilizarse como universo histórico por survivorship bias.
 declara como dependencia porque provee el Gaussian HMM solicitado; el HMM usa
 semilla explícita y covarianza diagonal. Los tres componentes son herramientas
 de análisis offline y no descargan datos por sí mismos.
+
+## Reporting + Experiment Tracking — Fase 6
+
+`reporting.build_research_report` agrega `BacktestResult`, `PerformanceMetrics`,
+comparación con benchmark, configuración, parámetros, símbolos, warnings y
+archivos generados. No vuelve a ejecutar estrategias ni recalcula métricas. La
+curva de drawdown se deriva de la equity curve solo para presentación. Los
+renderers producen JSON estable, CSV tabular y HTML autocontenido con SVG y
+contenido de usuario escapado. Los writers requieren una ruta explícita,
+crean directorios solo al invocarse y nunca abren un navegador.
+
+`experiments.data_fingerprint` calcula SHA-256 sobre JSON canónico del input;
+`ExperimentRegistry.register` registra timestamp UTC, estrategia, parámetros,
+huella de datos, símbolos, período, versión Git cuando está disponible,
+métricas, archivos y warnings. `save_experiment` escribe metadata JSON a un
+temporal en el mismo directorio y publica mediante hard-link atómico con
+creación exclusiva; IDs existentes no se sobrescriben. Claves de metadata con
+nombres de credenciales/secretos se sustituyen por `[REDACTED]`. El registro es
+local y no sustituye un proveedor de almacenamiento distribuido.
 
 ## Momentum Engine v0.1
 

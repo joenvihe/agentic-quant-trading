@@ -11,7 +11,7 @@ Status labels describe implemented behavior, not directory names:
 - **[EXISTS] Deterministic Market Regime baseline:** `regime/engine.py` classifies regimes using explicit configurable thresholds, metrics, evidence, and reason codes. This is a baseline, not an HMM or a trading recommendation.
 - **[EXISTS] Configuration primitives:** `config/settings.py`, `config/momentum.py`, and `config/regime.py` provide application settings and environment-configurable factor/regime parameters.
 - **[PARTIAL] Logging:** `config/logging_config.py` provides explicit logging configuration; logging policy and consistent use across all application boundaries remain to be established.
-- **[PARTIAL] Application and reporting:** `application/services/research.py` orchestrates the current single-asset research flow and `scripts/research_asset.py` renders a console report. It does not implement signals, strategies, backtests, portfolio construction, or a full reporting/experiment system.
+- **[PARTIAL] Application and reporting:** `application/services/research.py` orchestrates the current single-asset research flow and `scripts/research_asset.py` renders a console report. The reusable JSON/CSV/HTML report and experiment registry contracts are implemented separately in Phase 6 and are not yet integrated into that CLI flow.
 - **[PARTIAL] Signals + strategies:** `signals/` provides validated signal values and a long-only moving-average signal using existing SMA features. `strategies/` maps signals and existing momentum/regime outputs into target positions and has an explicit registry. Phase 1 acceptance awaits a successful full-suite run.
 - **[PARTIAL] Backtest + evaluation:** a deterministic daily, single-asset, long-only engine with next-bar execution and transaction costs is implemented, along with performance metrics and a causal Buy and Hold benchmark. Phase 2 acceptance awaits a successful full-suite run.
 - **[PARTIAL] Walk-forward validation:** `evaluation/` provides expanding/rolling temporal splits, train-only parameter selection, test-only evaluation, and OOS robustness summaries. Full-suite validation remains pending.
@@ -21,7 +21,9 @@ Status labels describe implemented behavior, not directory names:
 - **[PARTIAL] HMM regime:** `regime/hmm.py` adds seeded Gaussian HMM states and statistical labels alongside the deterministic baseline; regime comparison is implemented. Full-suite validation remains pending.
 - **[PARTIAL] Fundamental Engine:** provider/snapshot contracts, ROC, Earnings Yield, P/E, and a combined ranking are implemented. No external fundamental provider is included; full-suite validation remains pending.
 - **[PARTIAL] Universe Selection:** static symbol provider, normalization/deduplication, injected data provider, and configurable screening filters are implemented. Full-suite validation remains pending.
-- **[TODO] Sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
+- **[PARTIAL] Reporting:** `reporting/` builds structured JSON, CSV, and escaped HTML reports from backtest results, existing metrics, and benchmark comparisons. Full-suite validation remains pending.
+- **[PARTIAL] Experiment Tracking:** `experiments/` provides canonical data fingerprints and atomic, exclusive JSON metadata storage with best-effort Git version and sensitive-key redaction. Full-suite validation remains pending.
+- **[TODO] Sentiment, supervised ML, and paper trading:** no implementations are present.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
 
 ### Existing contracts and conventions
@@ -62,6 +64,9 @@ Phase 4 adds synthetic allocation, covariance, constraints, optimizer failure,
 and determinism tests.
 Phase 5 adds synthetic seeded-HMM, regime-comparison, fundamental metrics and
 ranking, point-in-time provider, and universe-filter tests.
+Phase 6 adds offline tests for reports with/without trades, JSON/CSV/HTML,
+escaping, benchmark comparisons, stable data fingerprints, atomic writes,
+loading, redaction, and overwrite prevention.
 
 ## Target architecture
 
@@ -123,13 +128,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 - **Tests required:** `tests/test_regime_hmm.py` covers seeded reproducibility, insufficient history, invalid time series, and deterministic/HMM comparison. `tests/test_fundamental.py` covers fake providers, point-in-time cutoff, missing values, ROC/EY/P-E, zero denominators, and combined ranking. `tests/test_universe.py` covers static provider normalization/deduplication, fake market metadata, price/history/missing-data/capitalization filters, and rejection reasons. The complete pytest suite must pass.
 - **Acceptance:** The deterministic regime engine remains unchanged and available; HMM labels are based on observed statistics rather than state IDs; fundamental missing values remain unavailable; universe filtering is deterministic and reports reasons. Current status remains **PARTIAL** until the full suite passes.
 
-### Phase 6 — Reporting + Experiment Tracking [TODO]
+### Phase 6 — Reporting + Experiment Tracking [PARTIAL]
 
-- **Objective:** Produce reusable structured research outputs and record the inputs/configuration/code version needed to reproduce an experiment.
-- **Modules affected:** `application/`, reporting modules, `evaluation/`, configuration, and tests.
-- **Dependencies:** Stable outputs from the implemented quantitative phases.
-- **Tests required:** Schema/serialization tests, unavailable-value handling, reproducibility metadata checks, and offline storage tests.
-- **Acceptance:** A report links results to their data range, configuration, and code identity; serialization is stable and does not invent missing values.
+- **Objective:** Produce reusable JSON/CSV/HTML research reports and record experiment inputs/outputs reproducibly.
+- **Modules affected:** `reporting/`, `experiments/`, package discovery, `.gitignore`, documentation, import characterization, and tests.
+- **Dependencies:** Existing `BacktestResult`, `PerformanceMetrics`, and `PerformanceComparison` contracts; standard-library serialization/storage only.
+- **Tests required:** `tests/test_reporting.py` covers reports without/with trades, format output, escaping, curves, warnings and benchmark comparisons. `tests/test_experiments.py` covers canonical fingerprints, metadata loading, timestamps, redaction, atomic publication failure, path safety, and non-overwrite behavior.
+- **Acceptance:** Reports serialize computed results without changing strategy decisions or recomputing metrics; HTML escapes content; writers only run on explicit paths. Experiment metadata is JSON, fingerprints are stable for equivalent inputs, writes publish atomically without overwriting existing IDs, and known secret fields are redacted. Current status remains **PARTIAL** until the full suite passes.
 
 ### Phase 7 — Sentiment + Supervised ML [TODO]
 

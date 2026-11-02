@@ -227,6 +227,23 @@ El Gaussian HMM utiliza `hmmlearn`, añadido como dependencia necesaria para
 implementar el modelo solicitado. Requiere un `random_state` explícito; la suite
 debe instalar las dependencias del proyecto (`python -m pip install -e ".[dev]"`).
 
+## Reporting y tracking de experimentos
+
+`reporting.build_research_report` recibe resultados de backtest, métricas ya
+calculadas y una comparación de benchmark; incorpora configuración,
+parámetros, equity curve, drawdown, trades y warnings. Renderiza JSON, CSV o
+HTML escapado con gráficos SVG. Para escribir, indica explícitamente el destino
+con `write_json_report`, `write_csv_report` o `write_html_report`; no se abre
+ningún navegador ni se escriben archivos al importar.
+
+`experiments.ExperimentRegistry` registra metadata JSON con timestamp UTC,
+estrategia/parametría, fingerprint SHA-256 estable de los datos, símbolos,
+fechas, versión Git opcional, métricas, outputs y warnings. La persistencia es
+atómica y exclusiva: un ID existente nunca se sobrescribe. Los campos con
+nombres típicos de secretos se guardan como `[REDACTED]`. El `.gitignore`
+excluye `reports/generated/`, `experiments/runs/` y archivos de reporte
+generados. No se incluye MLflow ni almacenamiento externo.
+
 ## Configuración
 
 La configuración está centralizada en `config/settings.py` y puede ajustarse

@@ -22,6 +22,13 @@ htmlcov/
 # Downloaded market data
 data/market_data/
 
+# Generated research artifacts
+reports/generated/
+experiments/runs/
+*.research-report.json
+*.research-report.csv
+*.research-report.html
+
 # Editors and operating systems
 .vscode/
 .idea/
