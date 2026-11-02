@@ -22,11 +22,16 @@
 - `features/`: Quant Feature Engine calcula indicadores exclusivamente sobre
   el contrato OHLCV normalizado de `data/`.
 - `factors/`: Momentum Engine rankea activos usando retornos y percentiles;
-  no produce señales ni operaciones.
+  produce factores/rankings, no señales ni operaciones.
 - `regime/`: Market Regime Engine clasifica dirección, fuerza, volatilidad y
   confirmación con reglas deterministas y thresholds configurables.
-- `strategies/`: futuras hipótesis y señales de investigación; no contiene
-  estrategias todavía.
+- `signals/`: contratos de señales y generadores que consumen resultados de
+  features existentes. `MovingAverageCrossSignal` lee SMA disponibles, opera
+  en modo long-only y no descarga datos.
+- `strategies/`: contratos y estrategias deterministas que transforman
+  señales/factores y régimen en `TargetPosition`. Incluye el mapeo
+  `MovingAverageStrategy`, la estrategia long-only `MomentumRegimeStrategy` y
+  un `StrategyRegistry` de registro explícito.
 - `risk/`: futuras métricas y reglas de análisis del riesgo.
 - `backtest/`: futura simulación histórica determinista.
 - `portfolio/`: futura agregación y análisis de carteras.
@@ -38,9 +43,10 @@
 - `tests/`: pruebas automatizadas con pytest.
 - `docs/`: documentación técnica.
 
-Los paquetes no dependen entre sí en esta fase. A medida que se añada
-funcionalidad, las dependencias deben fluir desde las capas de aplicación hacia
-componentes de dominio más pequeños, evitando ciclos.
+Los límites cuantitativos son explícitos: Feature != Factor != Signal !=
+Strategy != Order. Momentum permanece como factor/ranking. Una estrategia solo
+devuelve una posición objetivo; no crea órdenes ni realiza ejecución. Las
+dependencias fluyen hacia componentes de dominio más pequeños, evitando ciclos.
 
 ## Market Data Engine v0.1
 
@@ -55,8 +61,28 @@ comando no sustituye datos corregidos ni informa éxito si la descarga o
 validación falla. Las pruebas usan datos sintéticos y no necesitan Internet.
 
 Estos motores no identifican regímenes, predicen precios, conectan brokers,
-envían órdenes, gestionan dinero real ni incluyen LLMs, LangGraph o agentes
-autónomos.
+envían órdenes ni gestionan dinero real. Tampoco incluyen LLMs, LangGraph o
+agentes autónomos.
+
+## Signals + Strategies — Fase 1
+
+`signals.MovingAverageCrossSignal` recibe un `FeatureSeries` existente, evalúa
+la última fila con períodos SMA configurables entre los que ofrece el Feature
+Engine (20, 50, 100 y 200), y emite `LONG` si SMA rápida > SMA lenta; en otro
+caso emite `FLAT`. Si falta alguno de los valores por historial insuficiente,
+emite `FLAT` con metadatos que explican esa ausencia. Señales tienen timestamp
+timezone-aware, dirección, strength acotada y source.
+
+`strategies.MovingAverageStrategy` convierte `LONG` en peso objetivo 1 y
+`FLAT` en peso 0. `MomentumRegimeStrategy` exige `absolute_momentum` positivo y
+un régimen permitido; la allowlist predeterminada es `BULL_STRONG` y
+`BULL_VOLATILE`, validada contra los seis estados emitidos por Market Regime
+Engine. Ambas devuelven `TargetPosition` (peso entre -1 y 1) y razón
+descriptiva. `StrategyRegistry` solo registra instancias explícitas y rechaza
+nombres repetidos.
+
+No hay señales SHORT generadas por esta primera regla, backtesting, PnL,
+órdenes, brokers ni agentes.
 
 ## Momentum Engine v0.1
 

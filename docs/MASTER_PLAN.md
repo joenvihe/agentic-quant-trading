@@ -12,7 +12,8 @@ Status labels describe implemented behavior, not directory names:
 - **[EXISTS] Configuration primitives:** `config/settings.py`, `config/momentum.py`, and `config/regime.py` provide application settings and environment-configurable factor/regime parameters.
 - **[PARTIAL] Logging:** `config/logging_config.py` provides explicit logging configuration; logging policy and consistent use across all application boundaries remain to be established.
 - **[PARTIAL] Application and reporting:** `application/services/research.py` orchestrates the current single-asset research flow and `scripts/research_asset.py` renders a console report. It does not implement signals, strategies, backtests, portfolio construction, or a full reporting/experiment system.
-- **[TODO] Signals, strategies, risk, portfolio, backtest, and evaluation:** their directories (`factors/` contains the existing momentum factor; the separate `strategies/`, `risk/`, `portfolio/`, `backtest/`, and `evaluation/` packages contain only package markers).
+- **[PARTIAL] Signals + strategies:** `signals/` provides validated signal values and a long-only moving-average signal using existing SMA features. `strategies/` maps signals and existing momentum/regime outputs into target positions and has an explicit registry. Phase 1 acceptance awaits a successful full-suite run.
+- **[TODO] Risk, portfolio, backtest, and evaluation:** the separate `risk/`, `portfolio/`, `backtest/`, and `evaluation/` packages contain only package markers.
 - **[TODO] Agent and application tools:** `agents/` and `app/` contain package markers only; there is no agent runtime or application-tool layer.
 - **[TODO] HMM regime, fundamental analysis, universe selection, sentiment, supervised ML, experiment tracking, and paper trading:** no implementations are present.
 - **[BLOCKED] Real broker execution:** explicitly outside the current scope. Do not add it without a separate, explicit authorization and safety review; no credentials or real trading operations belong in this repository.
@@ -42,6 +43,9 @@ than order fields, repeated reports from identical synthetic history are
 byte-for-byte stable, and importing the current modules neither configures
 logging nor attempts provider/network access. These tests use synthetic data,
 fake providers, or a guarded subprocess; they do not depend on live market data.
+Phase 1 adds offline tests for signal states/validation, insufficient SMA
+history, strategy position mapping, allowed-regime gating, explicit registry
+behavior, and deterministic strategy outputs.
 
 ## Target architecture
 
@@ -63,13 +67,13 @@ Agents orchestrate these capabilities; they do not replace quantitative logic. I
 
 ## Roadmap
 
-### Phase 1 — Signals + Strategies [TODO]
+### Phase 1 — Signals + Strategies [PARTIAL]
 
-- **Objective:** Define explicit signal contracts and implement initial strategies that consume existing factors/features without conflating factors, signals, and trades.
-- **Modules affected:** New signal modules (to be placed consistently with the existing package layout), `strategies/`, configuration, and application orchestration only where required.
-- **Dependencies:** Existing normalized data, features, factors, and regime baseline. Specify signal timestamps, validity, and intended holding/decision semantics before implementation.
-- **Tests required:** Unit tests for signal states and strategy rules; boundary and missing-data tests; timestamp/availability tests proving no look-ahead; deterministic synthetic fixtures.
-- **Acceptance:** A strategy can transform point-in-time inputs into typed, explainable signals/actions, with no broker calls and no quantitative duplication in CLI code.
+- **Objective:** Define explicit signal contracts and implement initial strategies that consume existing factors/features without conflating factors, signals, target positions, and orders.
+- **Modules affected:** `signals/`, `strategies/`, `pyproject.toml` package discovery, documentation, and tests. Existing feature/factor/regime engines remain unchanged.
+- **Dependencies:** Existing `FeatureSeries`, `MomentumRank`, and `RegimeAssessment` contracts. The moving-average signal supports only SMA periods already emitted by Feature Engine; the momentum/regime strategy uses positive 12M absolute momentum and defaults to `BULL_STRONG` and `BULL_VOLATILE`, with a configurable allowlist.
+- **Tests required:** `tests/test_signals.py` and `tests/test_strategies.py` cover LONG/FLAT, insufficient history, invalid windows, strength boundaries, position mapping, registry and duplicate names, regime gating, input validation, and determinism. The complete pytest suite must pass.
+- **Acceptance:** Implemented contracts and strategies return typed, timezone-aware signals/target positions; no broker calls, orders, PnL, backtesting, or quantitative duplication in CLI code. Mark **COMPLETE only after the full test suite passes**. Current status remains **PARTIAL** while execution is blocked by the local Windows application-control policy.
 
 ### Phase 2 — Backtest + Performance Metrics [TODO]
 

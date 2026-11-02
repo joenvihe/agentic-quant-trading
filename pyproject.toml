@@ -32,6 +32,7 @@ include = [
     "portfolio*",
     "regime*",
     "risk*",
+    "signals*",
     "scripts*",
     "strategies*",
 ]

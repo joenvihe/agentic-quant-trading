@@ -3,7 +3,7 @@
 Proyecto educativo para construir progresivamente un sistema de investigación
 de swing trading basado en Python, herramientas cuantitativas e IA agéntica.
 
-## Alcance actual: Data, Feature, Momentum y Market Regime Engines v0.1
+## Alcance actual: Data, Features, Factors, Signals y Strategies
 
 Market Data Engine descarga OHLCV diario de Yahoo Finance, normaliza y valida
 las barras y las guarda localmente como CSV. Quant Feature Engine calcula
@@ -11,9 +11,13 @@ indicadores deterministas desde ese modelo normalizado. Momentum Engine usa
 esas features para rankear un universo; no genera señales ni operaciones.
 Market Regime Engine clasifica por reglas deterministas dirección, fuerza,
 volatilidad y confirmación; tampoco genera recomendaciones de mercado.
+Signals transforma features disponibles en valores de señal explícitos.
+Strategies evalúa señales o factores junto con el régimen y devuelve una
+posición objetivo de investigación; un factor no se convierte directamente en
+señal y una posición objetivo no es una orden.
 
-No se implementan estrategias, backtesting, ejecución de operaciones, broker,
-agentes, LLMs ni LangGraph.
+No se implementan backtesting, ejecución de operaciones, broker, agentes, LLMs
+ni LangGraph.
 
 ## Requisitos
 
@@ -106,6 +110,27 @@ Este comando orquesta Market Data Engine, Quant Feature Engine, Momentum Engine
 y Market Regime Engine. Resume datos y features disponibles; muestra `N/A`
 cuando falta historial o una comparación de universo. El score y percentil de
 momentum relativo aparecen como `N/A` para un único activo.
+
+## Signals y Strategies
+
+`signals.MovingAverageCrossSignal` consume las features ya calculadas del
+`FeatureSeries`; por defecto compara SMA20 con SMA50. Solo se permiten períodos
+SMA expuestos por el Feature Engine (20, 50, 100 y 200). Devuelve `LONG` cuando
+la media rápida supera la lenta y `FLAT` en caso contrario o si falta el
+historial requerido. No descarga datos ni genera órdenes.
+
+`strategies.MovingAverageStrategy` mapea esas señales a una `TargetPosition`
+con peso 1 para `LONG` y 0 para `FLAT`. `MomentumRegimeStrategy` consume el
+`MomentumRank` existente y el `RegimeAssessment` existente: requiere momentum
+absoluto positivo (retorno 12M > 0) y, por defecto, permite exposición solo en
+`BULL_STRONG` o `BULL_VOLATILE`. La allowlist se puede configurar en su
+constructor y se valida contra los estados reales del Market Regime Engine.
+`StrategyRegistry` registra explícitamente instancias y rechaza nombres
+duplicados.
+
+Las señales y posiciones objetivo son resultados cuantitativos de
+investigación, no instrucciones de ejecución. No hay órdenes ni conexión a
+broker.
 
 ## Configuración
 
