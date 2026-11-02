@@ -4,6 +4,7 @@ import argparse
 from collections.abc import Sequence
 from datetime import date
 import math
+from pathlib import Path
 import sys
 import traceback
 from typing import Any
@@ -65,6 +66,11 @@ def _parser() -> argparse.ArgumentParser:
         nargs="+",
         help="Uno o más símbolos, por ejemplo SPY QQQ.",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Usa datos sintéticos deterministas sin conexión de red.",
+    )
     parser.add_argument("--start-date", type=_iso_date, help="Fecha inicial YYYY-MM-DD.")
     parser.add_argument("--end-date", type=_iso_date, help="Fecha final YYYY-MM-DD.")
     parser.add_argument(
@@ -84,8 +90,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--slippage-bps", type=float, default=0.0)
     parser.add_argument(
         "--output-dir",
-        default="reports/generated",
-        help="Directorio de reportes y experimentos.",
+        default="reports",
+        help="Directorio relativo al research workspace para los reportes.",
     )
     parser.add_argument("--debug", action="store_true", help="Muestra traceback.")
     return parser
@@ -118,25 +124,41 @@ def main(
 
     parameters = _strategy_parameters(args.strategy_param, parser)
     try:
+        from config.settings import Settings
+
+        settings = Settings.from_env()
+        workspace = settings.research_workspace.resolve()
+        output_directory = _workspace_path(
+            args.output_dir, workspace, parser, "--output-dir"
+        )
+        data_directory = _workspace_path("data", workspace, parser, "data")
+        experiment_directory = _workspace_path(
+            "experiments", workspace, parser, "experiments"
+        )
+        for directory in (output_directory, data_directory, experiment_directory):
+            directory.mkdir(parents=True, exist_ok=True)
+
         if provider is None:
-            from config.settings import Settings
-            from data.providers.yahoo_finance import YahooFinanceProvider
+            if args.demo:
+                from data.synthetic import SyntheticMarketDataProvider
 
-            settings = Settings.from_env()
-            market_data_provider: MarketDataProvider = YahooFinanceProvider()
-            data_directory = settings.data_dir
+                market_data_provider: MarketDataProvider = SyntheticMarketDataProvider(
+                    start_date=args.start_date,
+                    end_date=args.end_date,
+                )
+            else:
+                from data.providers.yahoo_finance import YahooFinanceProvider
+
+                market_data_provider = YahooFinanceProvider()
         else:
-            from config.settings import Settings
-
-            settings = Settings.from_env()
             market_data_provider = provider
-            data_directory = settings.data_dir
 
         result = run_strategy_research(
             args.symbols,
             market_data_provider,
             data_directory=data_directory,
-            output_directory=args.output_dir,
+            output_directory=output_directory,
+            experiment_directory=experiment_directory,
             strategy_name=args.strategy,
             strategy_parameters=parameters,
             start_date=args.start_date,
@@ -144,6 +166,11 @@ def main(
             initial_cash=args.initial_cash,
             commission_bps=args.commission_bps,
             slippage_bps=args.slippage_bps,
+            additional_warnings=(
+                ("DEMO / SYNTHETIC DATA: no external market-data provider was used.",)
+                if args.demo
+                else ()
+            ),
         )
     except (
         MarketDataError,
@@ -158,6 +185,8 @@ def main(
             args.debug,
         )
 
+    if args.demo:
+        print("Data: DEMO / SYNTHETIC DATA")
     print(f"Strategy: {result.report.strategy_name}")
     print(f"Symbols: {', '.join(result.report.symbols)}")
     print(f"Total return: {result.metrics.total_return}")
@@ -168,6 +197,25 @@ def main(
     for path in result.output_files:
         print(f"  {path}")
     return 0
+
+
+def _workspace_path(
+    requested: str,
+    workspace: Path,
+    parser: argparse.ArgumentParser,
+    label: str,
+) -> Path:
+    candidate = Path(requested)
+    if candidate.is_absolute():
+        parser.error(f"{label} debe ser una ruta relativa al research workspace.")
+    if ".." in candidate.parts:
+        parser.error(f"{label} no puede contener traversal ('..').")
+    resolved = (workspace / candidate).resolve()
+    try:
+        resolved.relative_to(workspace)
+    except ValueError:
+        parser.error(f"{label} debe permanecer dentro del research workspace.")
+    return resolved
 
 
 def _report_error(message: str, debug: bool) -> int:

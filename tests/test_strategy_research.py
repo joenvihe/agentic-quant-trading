@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 import json
 from pathlib import Path
 
@@ -10,6 +10,7 @@ from application.services.strategy_research import (
     run_strategy_research,
 )
 from data.market_data import MarketDataDownloadError, MarketDataValidationError
+from data.synthetic import SyntheticMarketDataProvider
 from experiments.registry import ExperimentRegistry
 from scripts.run_strategy_research import main
 
@@ -21,28 +22,22 @@ class FakeMarketDataProvider:
     def __init__(self, error: Exception | None = None) -> None:
         self.error = error
         self.requested: list[str] = []
+        self._synthetic = SyntheticMarketDataProvider(
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 10, 26),
+        )
 
     def fetch(self, ticker: str) -> list[dict[str, object]]:
         self.requested.append(ticker)
         if self.error is not None:
             raise self.error
-        offset = 0.0 if ticker == "SPY" else 20.0
-        return [
-            {
-                "timestamp": START + timedelta(days=index),
-                "open": 100.0 + offset + index * 0.2,
-                "high": 100.5 + offset + index * 0.2,
-                "low": 99.5 + offset + index * 0.2,
-                "close": 100.0 + offset + index * 0.2,
-                "volume": 1000.0 + index,
-            }
-            for index in range(300)
-        ]
+        return list(self._synthetic.fetch(ticker))
 
 
 def test_pipeline_runs_with_fake_provider_and_writes_report_and_experiment(
-    tmp_path, capsys
+    tmp_path, capsys, monkeypatch
 ) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
     provider = FakeMarketDataProvider()
     result = main(
         [
@@ -65,7 +60,7 @@ def test_pipeline_runs_with_fake_provider_and_writes_report_and_experiment(
             "--slippage-bps",
             "3",
             "--output-dir",
-            str(tmp_path / "reports"),
+            "reports",
         ],
         provider=provider,
     )
@@ -89,10 +84,10 @@ def test_pipeline_runs_with_fake_provider_and_writes_report_and_experiment(
     assert payload["configuration"]["commission_bps"] == 2
     assert payload["configuration"]["slippage_bps"] == 3
     assert payload["period"]["start"].startswith("2024-01-01")
-    assert payload["period"]["end"].startswith("2024-10-26")
+    assert payload["period"]["end"].startswith("2024-10-25")
     assert len(tuple((tmp_path / "reports").glob("moving_average-*.csv"))) == 1
     assert len(tuple((tmp_path / "reports").glob("moving_average-*.html"))) == 1
-    experiment_files = tuple((tmp_path / "reports" / "experiments").glob("*.json"))
+    experiment_files = tuple((tmp_path / "experiments").glob("*.json"))
     assert len(experiment_files) == 1
     experiment = json.loads(experiment_files[0].read_text(encoding="utf-8"))
     assert experiment["strategy_name"] == "moving_average"
@@ -105,8 +100,9 @@ def test_pipeline_runs_with_fake_provider_and_writes_report_and_experiment(
 
 
 def test_momentum_regime_strategy_runs_without_converting_to_orders(
-    tmp_path, capsys
+    tmp_path, capsys, monkeypatch
 ) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
     provider = FakeMarketDataProvider()
 
     exit_code = main(
@@ -117,7 +113,7 @@ def test_momentum_regime_strategy_runs_without_converting_to_orders(
             "--strategy-param",
             "allowed_regimes=BULL_STRONG,BULL_VOLATILE",
             "--output-dir",
-            str(tmp_path / "reports"),
+            "reports",
         ],
         provider=provider,
     )
@@ -136,7 +132,10 @@ def test_momentum_regime_strategy_runs_without_converting_to_orders(
     assert "Traceback" not in output.err
 
 
-def test_date_range_uses_prior_history_to_warm_up_features(tmp_path, capsys) -> None:
+def test_date_range_uses_prior_history_to_warm_up_features(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
     exit_code = main(
         [
             "SPY",
@@ -145,7 +144,7 @@ def test_date_range_uses_prior_history_to_warm_up_features(tmp_path, capsys) -> 
             "--end-date",
             "2024-10-26",
             "--output-dir",
-            str(tmp_path / "reports"),
+            "reports",
         ],
         provider=FakeMarketDataProvider(),
     )
@@ -157,15 +156,19 @@ def test_date_range_uses_prior_history_to_warm_up_features(tmp_path, capsys) -> 
             encoding="utf-8"
         )
     )
-    assert report["period"]["start"].startswith("2024-06-01")
-    assert report["trades"][0]["timestamp"].startswith("2024-06-02")
+    assert report["period"]["start"].startswith("2024-06-03")
+    assert report["equity_curve"][0]["timestamp"].startswith("2024-06-03")
+    assert all(
+        trade["timestamp"][:10] >= "2024-06-03" for trade in report["trades"]
+    )
 
 
 def test_provider_failure_has_clear_message_without_traceback_by_default(
-    tmp_path, capsys
+    tmp_path, capsys, monkeypatch
 ) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
     exit_code = main(
-        ["SPY", "--output-dir", str(tmp_path / "reports")],
+        ["SPY", "--output-dir", "reports"],
         provider=FakeMarketDataProvider(
             MarketDataDownloadError("fake provider failure")
         ),
@@ -179,13 +182,16 @@ def test_provider_failure_has_clear_message_without_traceback_by_default(
     assert "Traceback" not in output.err
 
 
-def test_debug_mode_shows_traceback_for_provider_failure(tmp_path, capsys) -> None:
+def test_debug_mode_shows_traceback_for_provider_failure(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
     exit_code = main(
         [
             "SPY",
             "--debug",
             "--output-dir",
-            str(tmp_path / "reports"),
+            "reports",
         ],
         provider=FakeMarketDataProvider(
             MarketDataDownloadError("fake provider failure")
@@ -353,7 +359,7 @@ def test_invalid_strategy_symbol_or_dates_return_argument_exit_code(
                 "--end-date",
                 "2024-01-01",
                 "--output-dir",
-                str(tmp_path),
+                "reports",
             ],
             provider=provider,
         )
@@ -361,8 +367,50 @@ def test_invalid_strategy_symbol_or_dates_return_argument_exit_code(
 
     with pytest.raises(SystemExit) as invalid_costs:
         main(
-            ["SPY", "--slippage-bps", "10000", "--output-dir", str(tmp_path)],
+            ["SPY", "--slippage-bps", "10000", "--output-dir", "reports"],
             provider=provider,
         )
     assert invalid_costs.value.code == 2
     assert provider.requested == []
+
+
+@pytest.mark.parametrize("output_directory", ("../outside", "reports/../../outside"))
+def test_cli_rejects_output_directory_outside_workspace(
+    tmp_path, monkeypatch, output_directory: str
+) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
+    with pytest.raises(SystemExit) as rejected:
+        main(
+            ["SPY", "--output-dir", output_directory],
+            provider=FakeMarketDataProvider(),
+        )
+    assert rejected.value.code == 2
+
+
+def test_cli_rejects_absolute_output_directory(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path))
+    with pytest.raises(SystemExit) as rejected:
+        main(
+            ["SPY", "--output-dir", str(tmp_path / "outside")],
+            provider=FakeMarketDataProvider(),
+        )
+    assert rejected.value.code == 2
+
+
+def test_cli_rejects_output_symlink_that_escapes_workspace(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("AQT_RESEARCH_WORKSPACE", str(tmp_path / "workspace"))
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    link = tmp_path / "workspace" / "reports"
+    link.parent.mkdir()
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not permitted on this platform.")
+
+    with pytest.raises(SystemExit) as rejected:
+        main(
+            ["SPY", "--output-dir", "reports"],
+            provider=FakeMarketDataProvider(),
+        )
+    assert rejected.value.code == 2

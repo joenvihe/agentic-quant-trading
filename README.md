@@ -66,6 +66,93 @@ La Fase 10 se mantiene parcial hasta que la suite completa pueda ejecutarse.
 - Python 3.11 o posterior
 - `pip`
 
+## QUICK START - VERSION BASE v0.1
+
+### 1. Requisitos
+
+Python 3.11 o posterior y `pip`. La investigación real necesita conexión a
+Internet para Yahoo Finance; la demo y los tests usan datos locales/sintéticos.
+
+### 2. Crear y activar el entorno
+
+Desde PowerShell, en la raíz del repositorio:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+### 3. Instalar el proyecto
+
+```powershell
+python -m pip install -e ".[dev]"
+```
+
+### 4. Verificar instalación
+
+```powershell
+python -m scripts.verify_installation
+```
+
+El verificador revisa Python, dependencias, imports y acceso al workspace. No
+descarga datos.
+
+### 5. Ejecutar tests
+
+```powershell
+python -m pytest
+```
+
+### 6. Ejecutar demo offline
+
+```powershell
+python -m scripts.run_strategy_research SPY QQQ IWM --demo `
+  --start-date 2023-01-01 `
+  --end-date 2024-10-26 `
+  --strategy moving_average
+```
+
+La demo usa `SyntheticMarketDataProvider`, no llama a Yahoo Finance ni a la
+red, y marca sus resultados como `DEMO / SYNTHETIC DATA`.
+
+### 7. Ejecutar investigación real
+
+```powershell
+python -m scripts.run_strategy_research SPY QQQ `
+  --start-date 2023-01-01 `
+  --end-date 2025-12-31 `
+  --strategy moving_average
+```
+
+El CLI también soporta `momentum_regime`, `--strategy-param KEY=VALUE`,
+`--initial-cash`, `--commission-bps`, `--slippage-bps`, `--output-dir` y
+`--debug`. Las rutas de salida deben ser relativas y permanecer dentro del
+workspace.
+
+### 8. Ubicación de resultados
+
+Por defecto, bajo `research_workspace/`:
+
+- `reports/`: reporte JSON, CSV y HTML;
+- `experiments/`: metadata de cada experimento;
+- `data/market_data/`: datos de mercado persistidos.
+
+La raíz puede configurarse con `AQT_RESEARCH_WORKSPACE`; las rutas seleccionadas
+por el CLI permanecen ancladas dentro de ella.
+
+### 9. Limitaciones conocidas
+
+La versión base v0.1 incluye market data, features, estrategias existentes,
+Risk Engine existente, backtesting, benchmark, métricas, reporting y
+experiment tracking. También contiene un ResearchAgent determinista existente.
+El ResearchAgent no usa LLM ni LangGraph, no llama a PaperBroker y no ejecuta
+órdenes.
+
+v0.1 no implica un portfolio backtest consolidado, cash compartido, drawdown
+global de portfolio, LLM, LangGraph, trading autónomo, broker real, ejecución
+de dinero real ni recomendación financiera. El flujo multi-activo actual
+agrega backtests single-asset en sleeves; no es una cartera consolidada.
+
 ## Instalación para desarrollo
 
 Desde la raíz del proyecto:
@@ -115,11 +202,13 @@ código de salida es `0` si completa, `1` ante fallos de datos/ejecución y `2`
 para argumentos inválidos.
 
 El provider de mercado de producción usa Yahoo Finance; las pruebas inyectan
-providers falsos y no acceden a Internet. Reportes y experimentos se escriben
-en el directorio indicado. Multi-activo reutiliza el backtest existente de un
-activo mediante `EqualWeightAllocator`: aplica Risk Engine por activo, ejecuta
-backtests single-asset en sleeves de igual capital y agrega sus curvas en
-timestamps comunes. No constituye todavía una cartera consolidada con cash
+providers sintéticos/falsos y no acceden a Internet. El CLI ancla reportes,
+experimentos y datos bajo `AQT_RESEARCH_WORKSPACE`; `--output-dir` selecciona
+una subruta relativa para reportes, mientras que los experimentos se guardan en
+la carpeta `experiments/` de ese workspace. Multi-activo reutiliza el backtest
+existente de un activo mediante `EqualWeightAllocator`: aplica Risk Engine por
+activo, ejecuta backtests single-asset en sleeves de igual capital y agrega sus
+curvas en timestamps comunes. No constituye todavía una cartera consolidada con cash
 compartido, rebalanceo ni drawdown global. El límite de drawdown se evalúa por
 activo usando la feature rolling 52W, no sobre una curva consolidada de
 cartera. Esta ruta es investigación: no importa `PaperBroker`, no crea
@@ -370,8 +459,8 @@ La configuración está centralizada en `config/settings.py` y puede ajustarse
 mediante variables de entorno:
 
 - `AQT_DATA_DIR`: directorio de datos (por defecto, `data`)
-- `AQT_RESEARCH_WORKSPACE`: raíz del workspace del ResearchAgent (por defecto,
-  `research_workspace`)
+- `AQT_RESEARCH_WORKSPACE`: raíz del workspace del ResearchAgent y del CLI de
+  investigación (por defecto, `research_workspace`)
 - `AQT_LOG_LEVEL`: nivel de logging (por defecto, `INFO`)
 
 Para configurar el logging de la aplicación, se puede llamar

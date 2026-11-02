@@ -23,6 +23,7 @@ htmlcov/
 data/market_data/
 
 # Generated research artifacts
+research_workspace/
 reports/generated/
 experiments/runs/
 *.research-report.json

@@ -92,8 +92,10 @@ def run_strategy_research(
     *,
     data_directory: str | Path,
     output_directory: str | Path,
+    experiment_directory: str | Path | None = None,
     strategy_name: str = "moving_average",
     strategy_parameters: Mapping[str, Any] | None = None,
+    additional_warnings: Sequence[str] = (),
     start_date: date | None = None,
     end_date: date | None = None,
     initial_cash: float = 100_000.0,
@@ -232,7 +234,7 @@ def run_strategy_research(
         "on common timestamps.",
         "Risk drawdown checks use each asset's rolling 52-week close drawdown, "
         "not a portfolio-level circuit breaker.",
-    )
+    ) + tuple(additional_warnings)
     report = build_research_report(
         combined_result,
         metrics,
@@ -252,7 +254,9 @@ def run_strategy_research(
         output_files=tuple(str(path) for path in output_files),
     )
     registry = ExperimentRegistry(
-        output_root / "experiments",
+        Path(experiment_directory)
+        if experiment_directory is not None
+        else output_root / "experiments",
         repository_root=Path(__file__).resolve().parents[2],
     )
     experiment_record = registry.prepare(
