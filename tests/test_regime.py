@@ -120,11 +120,26 @@ def test_confirmation_threshold_requires_two_of_three_criteria() -> None:
     assert exactly_two.evidence["confirmation"]["state"] == "CONFIRMED_BULLISH"
 
     mixed = detect_regime(
-        make_features(sma_20=100, sma_50=110, return_1m=0.10),
+        make_features(
+            sma_20=100,
+            sma_50=110,
+            return_1m=0.11,
+            return_3m=-0.01,
+        ),
         RegimeThresholds(),
     )
     assert mixed.evidence["confirmation"]["bullish_agreements"] == 1
     assert mixed.evidence["confirmation"]["bearish_agreements"] == 1
+    assert mixed.evidence["confirmation"]["bullish_criteria"] == {
+        "return_1m_and_3m_positive": False,
+        "sma_20_above_sma_50": False,
+        "inferred_price_above_sma_50": True,
+    }
+    assert mixed.evidence["confirmation"]["bearish_criteria"] == {
+        "return_1m_and_3m_negative": False,
+        "sma_20_below_sma_50": True,
+        "inferred_price_below_sma_50": False,
+    }
     assert mixed.evidence["confirmation"]["state"] == "MIXED_OR_INSUFFICIENT"
 
 

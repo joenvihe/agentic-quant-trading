@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import math
 from types import SimpleNamespace
 from typing import cast
 
@@ -262,7 +263,14 @@ def test_walk_forward_warns_for_undefined_oos_metric_after_valid_selection(
     assert result.in_sample_metrics is not None
     assert result.out_of_sample_metrics is not None
     assert result.in_sample_metrics.sharpe == 1.0
-    assert result.out_of_sample_metrics.sharpe == oos_metric
+    observed_oos_metric = result.out_of_sample_metrics.sharpe
+    if oos_metric is None:
+        assert observed_oos_metric is None
+    elif math.isnan(oos_metric):
+        assert isinstance(observed_oos_metric, float)
+        assert math.isnan(observed_oos_metric)
+    else:
+        assert observed_oos_metric == oos_metric
     assert result.warnings == (
         "Out-of-sample sharpe is undefined for this window.",
     )
